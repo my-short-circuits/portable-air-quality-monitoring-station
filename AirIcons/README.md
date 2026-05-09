@@ -1,10 +1,9 @@
 # AirIcons
 
-The ESPHome YAML references local PNG assets for the boot logo, sensor icons, settings icons, battery icons, and the particulate-matter source graphic.
+The ESPHome YAML references local PNG assets for sensor icons, settings icons, battery icons, and the particulate-matter source graphic.
 
 Expected files:
 
-- `logo.png` - boot splash/logo, intentionally not included
 - `CO2icon.png`
 - `COicon.png`
 - `NH3icon.png`
@@ -26,6 +25,4 @@ Expected files:
 - `TIMEOUTicon.png`
 - `PLUGicon.png`
 
-The shared UI icons are included. The logo is intentionally not included; add your own `logo.png`, or remove/comment the matching `image:` entry and boot-page display call in `portable-air-quality-monitoring-station.yaml`.
-
-The splash screen uses `logo.png`; replace it with your own logo or remove the `it.image(...)` line on the boot page.
+The shared UI icons are included. The boot page does not require a logo file, so ESPHome will not fail if no logo PNG is present.

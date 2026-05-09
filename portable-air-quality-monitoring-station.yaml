@@ -306,9 +306,6 @@ color:
 
 # IMAGE ASSETS - Not included in this repo. See AirIcons/README.md.
 image:
-  - file: "AirIcons/logo.png"
-    id: img_logo
-    type: RGB565
   - file: "AirIcons/CO2icon.png"
     id: img_co2
     type: RGB565
@@ -2086,7 +2083,7 @@ display:
       - id: page_boot
         lambda: |-
           it.fill(Color(8,8,15));
-          it.image(10, 50, id(img_logo));
+          it.print(160, 108, id(f_body), Color(232,236,242), TextAlign::CENTER, "Portable AQ Station");
 
       - id: page_home
         lambda: |-

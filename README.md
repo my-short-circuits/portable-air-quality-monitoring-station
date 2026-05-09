@@ -12,7 +12,7 @@ The project is designed for a compact custom build: the components are connected
 - Uses a buzzer for local alerts, with sound control from the screen or Home Assistant.
 - Tracks daily min/max values and 4-hour on-device graphs.
 - Supports CO2 forced calibration, SPS30 fan auto-clean, gas baseline setting, screen timeout, display brightness, LED brightness, battery save mode, dark mode, Wi-Fi toggle, and optional deep sleep.
-- Estimates battery percentage and rough remaining runtime from a LiPo voltage divider.
+- Estimates battery percentage from a LiPo voltage divider.
 
 This is not a certified safety instrument. Do not use it as a life-safety CO alarm, smoke detector, or regulatory air monitor.
 
@@ -47,7 +47,13 @@ Core hardware used by the YAML:
 - PWM buzzer
 - LiPo battery, default capacity set to `4000` mAh
 - Battery voltage divider feeding ESP32 ADC
+- 3.3V-to-5V boost converter for the 5V rail
+- Bidirectional logic level converter for signals that cross between the ESP32's 3.3V GPIO and 5V devices
 - Custom PCB to connect the components and package them into the printed enclosure
+
+The ESP32 and most breakout sensors in this build are 3.3V logic devices. The SPS30 particulate sensor needs a 5V supply, and many ILI9341 TFT modules use a 5V input rail for the display/backlight board even when the logic signals are 3.3V. Use a 3.3V-to-5V boost converter to create that 5V rail from the battery/3.3V system rail.
+
+Use the logic level converter on any signal line connected to a 5V-side device that is not explicitly 3.3V logic safe. In this design that mainly means the SPS30 I2C lines if it is powered from 5V, and any TFT/touch module signal lines if your display board expects 5V logic. The converter protects the ESP32 GPIO pins and lets 3.3V and 5V devices communicate cleanly.
 
 ## Pinout
 
@@ -100,11 +106,11 @@ The gas page and `Gas Index` are trend-oriented. Let the unit warm up, expose it
 - `portable-air-quality-monitoring-station.yaml` - sanitized ESPHome configuration
 - `secrets.yaml.example` - template for private credentials
 - `fonts/README.md` - font requirements
-- `AirIcons/README.md` - image/logo/icon requirements
+- `AirIcons/README.md` - image/icon requirements
 
-No secrets, private Wi-Fi information, photos, or personal logo image are included.
+No secrets, private Wi-Fi information, or photos are included.
 
-## Required Setup Before Flashing
+## Setup
 
 1. Install ESPHome `2026.4` or newer.
 2. Copy `secrets.yaml.example` to `secrets.yaml`.
@@ -116,24 +122,19 @@ No secrets, private Wi-Fi information, photos, or personal logo image are includ
    - `battery_mah`
    - `timezone`
    - `outdoor_weather_entity`
-5. Add your own boot logo at `AirIcons/logo.png`, or remove/comment the `img_logo` entry and boot-page `it.image(...)` call.
-6. The shared fonts and UI icons are included. Replace them only if you want different assets and have the right to use them.
-7. Review the pinout and change pins if your PCB or hand wiring differs.
-8. Review the CCS811 `baseline:` value. Replace it with your own learned baseline or remove it.
+5. The shared fonts and UI icons are included. Replace them only if you want different assets and have the right to use them.
+6. Review the pinout and change pins if your PCB or hand wiring differs.
+7. Review the CCS811 `baseline:` value. Replace it with your own learned baseline or remove it.
 
 ## Images and Fonts
 
-The YAML uses local PNG images and local `.ttf` fonts. The shared UI icons and required font files are included in this repository. The personal boot logo is intentionally not included.
-
-The boot splash uses:
-
-- `AirIcons/logo.png`
+The YAML uses local PNG images and local `.ttf` fonts. The shared UI icons and required font files are included in this repository.
 
 The particulate info page uses:
 
 - `AirIcons/PMsources.png`
 
-The YAML also defines multiple icon PNGs for future or alternate UI use. If any referenced image is missing, ESPHome can fail during compile. Add your own `AirIcons/logo.png`, or comment out the matching logo entry and the boot-page `it.image(...)` call.
+The YAML also defines multiple icon PNGs for future or alternate UI use. If any referenced image is missing, ESPHome can fail during compile.
 
 The font filenames are `PNB.ttf` and `PNR.ttf`. If you replace them, make sure you have the correct license. You can also switch the YAML to open fonts such as Inter, Roboto, or Noto Sans if you prefer.
 
@@ -181,39 +182,15 @@ The CO, NH3, and NO2 channels are relative gas signals through the ADS1115. They
 
 Battery voltage is read on GPIO34 and multiplied by `2.0`, so the hardware is expected to divide the LiPo voltage roughly in half before it reaches the ESP32 ADC. Keep the ADC input within ESP32-safe voltage limits.
 
-The battery percentage curve is an estimate, not coulomb counting. Runtime is estimated from `battery_mah` and assumed current draw:
-
-- About `150 mA` with Wi-Fi enabled
-- About `80 mA` with Wi-Fi disabled
-- Reduced further in battery save mode
+The battery percentage curve is an estimate, not coulomb counting.
 
 Use properly protected LiPo cells and safe charging hardware.
 
-## Flashing
-
-From this directory:
-
-```bash
-esphome run portable-air-quality-monitoring-station.yaml
-```
-
-For a first flash over USB, connect the FireBeetle 2 ESP32-E by USB and choose the serial target when ESPHome prompts. After adoption, OTA updates can use the configured `ota_password`.
-
 ## Troubleshooting
 
-- Missing logo or PNG files usually cause compile-time errors. Add `AirIcons/logo.png` or remove the logo reference.
+- Missing PNG or font files usually cause compile-time errors. Confirm the referenced `AirIcons/` and `fonts/` files are present.
 - If outdoor weather shows `waiting`, update `outdoor_weather_entity` to a real Home Assistant weather entity.
 - If touch coordinates are wrong, recalibrate the XPT2046 values under `touchscreen.calibration`.
 - If battery percentage is wrong, verify the voltage divider ratio and adjust the `multiply: 2.0` filter.
 - If gas readings always show `Needs baseline`, let the analog gas sensors warm up and run `Set Gas Baseline`.
 - If the TFT reset pin conflicts with your board wiring, move `display.reset_pin` off GPIO1 and update the wiring table.
-
-## Publishing Safely
-
-Before publishing your fork or modified copy:
-
-- Confirm `secrets.yaml` is not committed.
-- Search for your Wi-Fi SSID, passwords, API keys, exact home location, and private Home Assistant entity names.
-- Replace or remove personal logos and icons.
-- Confirm that you have rights to any fonts or images you include.
-- Add a license file if you want others to reuse the project under a specific open-source license.

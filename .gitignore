@@ -14,7 +14,5 @@ secrets.yaml
 Thumbs.db
 .DS_Store
 
-# Personal logo/splash image.
-# The shared icons and fonts used by this project are committed, but the logo is
-# intentionally left for each builder to provide.
+# Optional personal logo/splash image.
 AirIcons/logo.png
