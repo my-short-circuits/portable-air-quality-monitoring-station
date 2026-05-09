@@ -14,8 +14,7 @@ secrets.yaml
 Thumbs.db
 .DS_Store
 
-# User-provided licensed or personal visual assets.
-# Keep the folder documentation, but do not commit fonts/images by default.
-fonts/*.ttf
-AirIcons/*.png
-
+# Personal logo/splash image.
+# The shared icons and fonts used by this project are committed, but the logo is
+# intentionally left for each builder to provide.
+AirIcons/logo.png

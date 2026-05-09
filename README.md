@@ -102,7 +102,7 @@ The gas page and `Gas Index` are trend-oriented. Let the unit warm up, expose it
 - `fonts/README.md` - font requirements
 - `AirIcons/README.md` - image/logo/icon requirements
 
-No secrets, private Wi-Fi information, photos, or binary image assets are included.
+No secrets, private Wi-Fi information, photos, or personal logo image are included.
 
 ## Required Setup Before Flashing
 
@@ -116,16 +116,14 @@ No secrets, private Wi-Fi information, photos, or binary image assets are includ
    - `battery_mah`
    - `timezone`
    - `outdoor_weather_entity`
-5. Add your own font files:
-   - `fonts/PNB.ttf`
-   - `fonts/PNR.ttf`
-6. Add your own PNG assets in `AirIcons/`, or remove/comment the `image:` entries and display calls that use them.
+5. Add your own boot logo at `AirIcons/logo.png`, or remove/comment the `img_logo` entry and boot-page `it.image(...)` call.
+6. The shared fonts and UI icons are included. Replace them only if you want different assets and have the right to use them.
 7. Review the pinout and change pins if your PCB or hand wiring differs.
 8. Review the CCS811 `baseline:` value. Replace it with your own learned baseline or remove it.
 
 ## Images and Fonts
 
-The YAML uses local PNG images and local `.ttf` fonts. They are intentionally ignored by git because they are personal or licensed assets.
+The YAML uses local PNG images and local `.ttf` fonts. The shared UI icons and required font files are included in this repository. The personal boot logo is intentionally not included.
 
 The boot splash uses:
 
@@ -135,9 +133,9 @@ The particulate info page uses:
 
 - `AirIcons/PMsources.png`
 
-The YAML also defines multiple icon PNGs for future or alternate UI use. If any referenced image is missing, ESPHome can fail during compile. Replace the files with your own assets, or comment out the matching entries and any `it.image(...)` drawing calls.
+The YAML also defines multiple icon PNGs for future or alternate UI use. If any referenced image is missing, ESPHome can fail during compile. Add your own `AirIcons/logo.png`, or comment out the matching logo entry and the boot-page `it.image(...)` call.
 
-The font filenames are `PNB.ttf` and `PNR.ttf`. If these are Proxima Nova or another commercial font, make sure you have the correct license. You can also switch the YAML to open fonts such as Inter, Roboto, or Noto Sans if you prefer.
+The font filenames are `PNB.ttf` and `PNR.ttf`. If you replace them, make sure you have the correct license. You can also switch the YAML to open fonts such as Inter, Roboto, or Noto Sans if you prefer.
 
 ## Home Assistant Notes
 
@@ -203,7 +201,7 @@ For a first flash over USB, connect the FireBeetle 2 ESP32-E by USB and choose t
 
 ## Troubleshooting
 
-- Missing fonts or PNG files usually cause compile-time errors. Add the assets or remove the references.
+- Missing logo or PNG files usually cause compile-time errors. Add `AirIcons/logo.png` or remove the logo reference.
 - If outdoor weather shows `waiting`, update `outdoor_weather_entity` to a real Home Assistant weather entity.
 - If touch coordinates are wrong, recalibrate the XPT2046 values under `touchscreen.calibration`.
 - If battery percentage is wrong, verify the voltage divider ratio and adjust the `multiply: 2.0` filter.
