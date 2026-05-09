@@ -1,0 +1,21 @@
+# ESPHome local/private files
+secrets.yaml
+.esphome/
+
+# Build artifacts
+*.bin
+*.elf
+*.map
+*.factory.bin
+
+# Local editor/OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# User-provided licensed or personal visual assets.
+# Keep the folder documentation, but do not commit fonts/images by default.
+fonts/*.ttf
+AirIcons/*.png
+

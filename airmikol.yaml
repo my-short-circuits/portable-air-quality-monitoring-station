@@ -1,0 +1,2674 @@
+################################################################################
+#  AirMikol v3.2 | ESPHome 2026.4+ | FireBeetle 2 ESP32-E
+#
+#  Sanitized public example:
+#  - Copy secrets.yaml.example to secrets.yaml and fill in your own values.
+#  - Add your own fonts and AirIcons assets, or remove/comment those sections.
+#  - Update timezone and outdoor_weather_entity for your Home Assistant setup.
+################################################################################
+substitutions:
+  device_name: airmikol
+  friendly_name: AirMikol
+  co2_cal_ppm: "420"
+  battery_mah: "4000"
+  timezone: "Etc/UTC"
+  outdoor_weather_entity: weather.home
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -10
+    then:
+      - component.update: uptime_sensor
+      - lambda: |-
+          if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+            id(deep_sleep_mode) = true;
+          } else {
+            id(deep_sleep_mode) = false;
+          }
+          id(last_alert_ts) = -1800.0f;
+          id(is_charging) = false;
+      - lambda: |-
+          id(backlight_pct) = 100.0f;
+          auto call = id(backlight).make_call();
+          call.set_state(true);
+          call.set_brightness(1.0f);
+          call.perform();
+      - delay: 3s
+      - display.page.show: page_home
+      - component.update: tft_display
+      - delay: 500ms
+      - script.execute: force_boot_brightness
+
+preferences:
+  flash_write_interval: 48h
+
+esp32:
+  board: firebeetle32
+  framework:
+    type: arduino
+
+logger:
+  baud_rate: 0
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_key
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: LIGHT
+  fast_connect: true
+  reboot_timeout: 0s
+  ap:
+    ssid: "AirMikol Setup"
+    password: !secret ap_password
+    ap_timeout: 2min
+captive_portal:
+
+time:
+  - platform: sntp
+    id: ha_time
+    timezone: "${timezone}"
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  id: bus_a
+
+ads1115:
+  - address: 0x48
+    continuous_mode: false
+
+uart:
+  rx_pin: GPIO3
+  tx_pin:
+    number: GPIO1
+    allow_other_uses: true
+  baud_rate: 9600
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+deep_sleep:
+  id: deep_sleep_1
+  sleep_duration: 3min
+
+globals:
+  - id: deep_sleep_mode
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: battery_save_mode
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: away_mode
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: is_charging
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: prev_battery_v
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: charge_rise_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: charge_fall_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: backlight_pct
+    type: float
+    restore_value: yes
+    initial_value: '80'
+  - id: led_pct
+    type: float
+    restore_value: yes
+    initial_value: '30'
+  - id: screen_timeout_on
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+  - id: screen_timeout_seconds
+    type: int
+    restore_value: yes
+    initial_value: '30'
+  - id: sound_on
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+  - id: use_fahrenheit
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: wifi_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: co2_alert_ppm
+    type: int
+    restore_value: yes
+    initial_value: '1000'
+  - id: pm25_alert_ugm3
+    type: float
+    restore_value: yes
+    initial_value: '12.0'
+  - id: voc_alert_idx
+    type: int
+    restore_value: yes
+    initial_value: '250'
+  - id: last_alert_ts
+    type: float
+    restore_value: no
+    initial_value: '-1800.0'
+  - id: co2_daily_min
+    type: float
+    restore_value: no
+    initial_value: '9999.0'
+  - id: co2_daily_max
+    type: float
+    restore_value: no
+    initial_value: '-1.0'
+  - id: pm25_daily_min
+    type: float
+    restore_value: no
+    initial_value: '9999.0'
+  - id: pm25_daily_max
+    type: float
+    restore_value: no
+    initial_value: '-1.0'
+  - id: temp_daily_min
+    type: float
+    restore_value: no
+    initial_value: '999.0'
+  - id: temp_daily_max
+    type: float
+    restore_value: no
+    initial_value: '-999.0'
+  - id: voc_10min_ago
+    type: float
+    restore_value: no
+    initial_value: '100.0'
+  - id: pm_warmed_up
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: co2_stable
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: last_alert_msg
+    type: std::string
+    restore_value: no
+    initial_value: '"No alerts"'
+  - id: temp_baseline_offset_c
+    type: float
+    restore_value: yes
+    initial_value: '-1.4'
+  - id: self_heat_strength
+    type: float
+    restore_value: yes
+    initial_value: '0.04'
+  - id: graph_view
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: co_gas_baseline
+    type: float
+    restore_value: yes
+    initial_value: '-1.0'
+  - id: nh3_gas_baseline
+    type: float
+    restore_value: yes
+    initial_value: '-1.0'
+  - id: no2_gas_baseline
+    type: float
+    restore_value: yes
+    initial_value: '-1.0'
+
+# FONTS - Add the matching local files, or edit paths for your own licensed fonts.
+font:
+  - file: 'fonts/PNB.ttf'
+    id: f_hero
+    size: 48
+    glyphs: ' 0123456789.+-,:;%CFhm'
+  - file: 'fonts/PNB.ttf'
+    id: f_large
+    size: 28
+    glyphs: ' !"#%&()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_~'
+  - file: 'fonts/PNB.ttf'
+    id: f_med
+    size: 20
+    glyphs: ' !"#%&()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_~'
+  - file: 'fonts/PNR.ttf'
+    id: f_body
+    size: 14
+    glyphs: ' !"#%&()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_~'
+  - file: 'fonts/PNR.ttf'
+    id: f_small
+    size: 11
+    glyphs: ' !"#%&()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_~'
+
+color:
+  - id: c_good
+    red: 0%
+    green: 89%
+    blue: 25%
+  - id: c_red
+    red: 100%
+    green: 12%
+    blue: 12%
+  - id: c_orange
+    red: 100%
+    green: 50%
+    blue: 0%
+  - id: c_yellow
+    red: 100%
+    green: 90%
+    blue: 0%
+  - id: c_green
+    red: 15%
+    green: 90%
+    blue: 30%
+  - id: c_purple
+    red: 65%
+    green: 20%
+    blue: 90%
+  - id: c_teal
+    red: 0%
+    green: 80%
+    blue: 70%
+  - id: c_accent
+    red: 0%
+    green: 85%
+    blue: 100%
+  - id: c_blue
+    red: 10%
+    green: 40%
+    blue: 100%
+
+# IMAGE ASSETS - Not included in this repo. See AirIcons/README.md.
+image:
+  - file: "AirIcons/AirMikologo.png"
+    id: img_logo
+    type: RGB565
+  - file: "AirIcons/CO2icon.png"
+    id: img_co2
+    type: RGB565
+  - file: "AirIcons/COicon.png"
+    id: img_co
+    type: RGB565
+  - file: "AirIcons/NH3icon.png"
+    id: img_nh3
+    type: RGB565
+  - file: "AirIcons/NO2icon.png"
+    id: img_no2
+    type: RGB565
+  - file: "AirIcons/TVOCicon.png"
+    id: img_tvoc
+    type: RGB565
+  - file: "AirIcons/PMicon.png"
+    id: img_pm
+    type: RGB565
+  - file: "AirIcons/TEMPicon.png"
+    id: img_temp
+    type: RGB565
+  - file: "AirIcons/HUMIicon.png"
+    id: img_humi
+    type: RGB565
+  - file: "AirIcons/SETTINGSicon.png"
+    id: img_settings
+    type: RGB565
+  - file: "AirIcons/BATTERYicon.png"
+    id: img_battery_lg
+    type: RGB565
+  - file: "AirIcons/MINIBATTERYicon.png"
+    id: img_battery_sm
+    type: RGB565
+  - file: "AirIcons/CLEANicon.png"
+    id: img_clean
+    type: RGB565
+  - file: "AirIcons/WIFIicon.png"
+    id: img_wifi
+    type: RGB565
+  - file: "AirIcons/SOUNDicon.png"
+    id: img_sound
+    type: RGB565
+  - file: "AirIcons/SCREENicon.png"
+    id: img_screen
+    type: RGB565
+  - file: "AirIcons/LEDicon.png"
+    id: img_led
+    type: RGB565
+  - file: "AirIcons/INFOicon.png"
+    id: img_info
+    type: RGB565
+  - file: "AirIcons/PMsources.png"
+    id: img_pm_sources
+    type: GRAYSCALE
+  - file: "AirIcons/TIMEOUTicon.png"
+    id: img_timeout
+    resize: 28x22
+    type: RGB565
+  - file: "AirIcons/PLUGicon.png"
+    id: img_plug
+    resize: 13x13
+    type: RGB565
+
+output:
+  - platform: gpio
+    pin: GPIO15
+    id: gpio_15
+  - platform: ledc
+    pin: GPIO12
+    id: backlight_pwm
+    frequency: 1000Hz
+  - platform: ledc
+    pin: GPIO13
+    id: buzzer_pwm
+    frequency: 800Hz
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "AirMikol Backlight"
+    id: backlight
+    restore_mode: ALWAYS_ON
+    default_transition_length: 300ms
+  - platform: neopixelbus
+    type: GRB
+    id: status_led
+    variant: WS2812
+    pin: GPIO5
+    num_leds: 1
+    name: "AirMikol Status LED"
+    restore_mode: ALWAYS_ON
+    default_transition_length: 500ms
+    effects:
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 1500ms
+          update_interval: 2000ms
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 300ms
+          update_interval: 400ms
+
+graph:
+  - id: g_co2
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 500
+    min_range: 200
+    traces:
+      - sensor: co2
+        continuous: true
+        line_thickness: 2
+        color: c_purple
+  - id: g_co2_compact
+    duration: 4h
+    width: 288
+    height: 76
+    x_grid: 1h
+    min_range: 200
+    traces:
+      - sensor: co2
+        continuous: true
+        line_thickness: 2
+        color: c_purple
+  - id: g_pm
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 12
+    min_range: 5
+    traces:
+      - sensor: pm25
+        continuous: true
+        line_thickness: 2
+        color: c_accent
+  - id: g_pm_compact
+    duration: 4h
+    width: 288
+    height: 50
+    x_grid: 1h
+    min_range: 5
+    traces:
+      - sensor: pm25
+        continuous: true
+        line_thickness: 2
+        color: c_accent
+  - id: g_voc
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 100
+    min_range: 50
+    traces:
+      - sensor: voc_idx
+        continuous: true
+        line_thickness: 2
+        color: c_purple
+  - id: g_temp
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 5
+    min_range: 4
+    traces:
+      - sensor: temperature
+        continuous: true
+        line_thickness: 2
+        color: c_red
+  - id: g_humidity
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 20
+    min_range: 20
+    traces:
+      - sensor: humidity
+        continuous: true
+        line_thickness: 2
+        color: c_accent
+  - id: g_gas
+    duration: 4h
+    width: 252
+    height: 102
+    x_grid: 1h
+    y_grid: 50
+    min_range: 20
+    traces:
+      - sensor: gas_index
+        continuous: true
+        line_thickness: 2
+        color: c_orange
+  - id: g_co_gas
+    duration: 4h
+    width: 288
+    height: 26
+    x_grid: 1h
+    min_range: 20
+    traces:
+      - sensor: gas_index
+        continuous: true
+        line_thickness: 2
+        color: c_orange
+  - id: g_battery
+    duration: 24h
+    width: 288
+    height: 64
+    x_grid: 4h
+    traces:
+      - sensor: battery_pct
+        line_thickness: 2
+        color: c_green
+
+sensor:
+  - platform: scd4x
+    id: scd41
+    measurement_mode: low_power_periodic
+    altitude_compensation: 50m
+    automatic_self_calibration: true
+    update_interval: 60s
+    co2:
+      name: "CO2"
+      id: co2
+      device_class: carbon_dioxide
+      state_class: measurement
+      unit_of_measurement: "ppm"
+      on_value:
+        then:
+          - lambda: |-
+              if (x < id(co2_daily_min)) id(co2_daily_min) = x;
+              if (x > id(co2_daily_max)) id(co2_daily_max) = x;
+              if (!id(co2_stable) && id(uptime_sensor).state > 180) id(co2_stable) = true;
+    temperature:
+      name: "SCD41 Temp"
+      id: scd41_temp
+      internal: true
+    humidity:
+      name: "SCD41 Hum"
+      id: scd41_hum
+      internal: true
+
+  - platform: sht3xd
+    address: 0x44
+    update_interval: 30s
+    heater_enabled: false
+    temperature:
+      name: "Raw Temperature"
+      id: temperature_raw
+      device_class: temperature
+      state_class: measurement
+      internal: true
+      filters:
+        - sliding_window_moving_average:
+            window_size: 3
+            send_every: 1
+    humidity:
+      name: "Raw Humidity"
+      id: humidity_raw
+      device_class: humidity
+      state_class: measurement
+      internal: true
+
+  - platform: sgp4x
+    update_interval: 60s
+    store_baseline: true
+    compensation:
+      temperature_source: scd41_temp
+      humidity_source: scd41_hum
+    voc:
+      name: "VOC Index"
+      id: voc_idx
+      device_class: aqi
+      state_class: measurement
+    nox:
+      name: "NOx Index"
+      id: nox_idx
+      state_class: measurement
+
+  - platform: sps30
+    id: sps30_sensor
+    address: 0x69
+    update_interval: 10s
+    idle_interval: 5min
+    pm_1_0:
+      name: "PM 1.0"
+      id: pm1
+      device_class: pm1
+      state_class: measurement
+      on_value:
+        then:
+          - lambda: |-
+              if (!id(pm_warmed_up) && id(uptime_sensor).state > 30) id(pm_warmed_up) = true;
+    pm_2_5:
+      name: "PM 2.5"
+      id: pm25
+      device_class: pm25
+      state_class: measurement
+      accuracy_decimals: 1
+      on_value:
+        then:
+          - lambda: |-
+              if (x < id(pm25_daily_min)) id(pm25_daily_min) = x;
+              if (x > id(pm25_daily_max)) id(pm25_daily_max) = x;
+    pm_4_0:
+      name: "PM 4.0"
+      id: pm4
+      state_class: measurement
+    pm_10_0:
+      name: "PM 10"
+      id: pm10
+      device_class: pm10
+      state_class: measurement
+    pmc_0_5:
+      name: "PM 0.5um Count"
+      id: pm05_num
+      state_class: measurement
+    pmc_1_0:
+      name: "PM 1.0um Count"
+      id: pm10_num
+      state_class: measurement
+    pmc_2_5:
+      name: "PM 2.5um Count"
+      id: pm25_num
+      state_class: measurement
+    pmc_4_0:
+      name: "PM 4.0um Count"
+      id: pm40_num
+      state_class: measurement
+    pmc_10_0:
+      name: "PM 10um Count"
+      id: pm100_num
+      state_class: measurement
+    pm_size:
+      name: "Typical Particle Size"
+      id: pm_size
+      state_class: measurement
+      unit_of_measurement: "um"
+
+  - platform: ccs811
+    id: ccs811_sensor
+    address: 0x5A
+    update_interval: 30s
+    # Replace with your own learned CCS811 baseline or remove this line.
+    baseline: 0x45B8
+    temperature: scd41_temp
+    humidity: scd41_hum
+    eco2:
+      name: "CCS811 eCO2"
+      id: eco2_ccs
+      unit_of_measurement: "ppm"
+      state_class: measurement
+      internal: true
+    tvoc:
+      name: "CCS811 TVOC"
+      id: tvoc_ccs
+      unit_of_measurement: "ppb"
+      state_class: measurement
+      filters:
+        - sliding_window_moving_average:
+            window_size: 4
+            send_every: 1
+
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 4.096
+    name: "CO relative"
+    id: co_raw
+    update_interval: 30s
+    unit_of_measurement: "rel"
+    state_class: measurement
+    filters:
+      - median:
+          window_size: 5
+          send_every: 1
+          send_first_at: 1
+      - sliding_window_moving_average:
+          window_size: 12
+          send_every: 2
+      - lambda: return (x * 3.4f * (2500000.0f * (0.256f / 32767.0f)));
+  - platform: ads1115
+    multiplexer: 'A1_GND'
+    gain: 4.096
+    name: "NH3 relative"
+    id: nh3_raw
+    update_interval: 30s
+    unit_of_measurement: "rel"
+    state_class: measurement
+    filters:
+      - median:
+          window_size: 5
+          send_every: 1
+          send_first_at: 1
+      - sliding_window_moving_average:
+          window_size: 12
+          send_every: 2
+      - lambda: return (x * 1000.0f * (4000.0f * (0.256f / 32767.0f)));
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 4.096
+    name: "NO2 relative"
+    id: no2_raw
+    update_interval: 30s
+    unit_of_measurement: "rel"
+    state_class: measurement
+    filters:
+      - median:
+          window_size: 5
+          send_every: 1
+          send_first_at: 1
+      - sliding_window_moving_average:
+          window_size: 12
+          send_every: 2
+      - lambda: return (x * 1000000.0f * (20.0f * (0.256f / 32767.0f)));
+
+  - platform: template
+    name: "Gas Environment Factor"
+    id: gas_env_factor
+    internal: true
+    accuracy_decimals: 3
+    update_interval: 60s
+    lambda: |-
+      float t = id(temperature).state;
+      float rh = id(humidity).state;
+      if (isnan(t) || isnan(rh)) return 1.0f;
+      // Conservative drift dampening only. These sensors still need a clean-air baseline.
+      float factor = 1.0f + (t - 20.0f) * 0.006f + (rh - 50.0f) * 0.003f;
+      if (factor < 0.80f) factor = 0.80f;
+      if (factor > 1.25f) factor = 1.25f;
+      return factor;
+
+  - platform: template
+    name: "CO Baseline Change"
+    id: co_gas_index
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 60s
+    lambda: |-
+      float raw = id(co_raw).state;
+      float base = id(co_gas_baseline);
+      float factor = id(gas_env_factor).state;
+      if (isnan(raw) || base <= 0.01f) return 0.0f;
+      if (isnan(factor) || factor < 0.20f) factor = 1.0f;
+      float pct = ((raw / factor) / base - 1.0f) * 100.0f;
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 300.0f) pct = 300.0f;
+      return pct;
+    filters:
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+
+  - platform: template
+    name: "NH3 Baseline Change"
+    id: nh3_gas_index
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 60s
+    lambda: |-
+      float raw = id(nh3_raw).state;
+      float base = id(nh3_gas_baseline);
+      float factor = id(gas_env_factor).state;
+      if (isnan(raw) || base <= 0.01f) return 0.0f;
+      if (isnan(factor) || factor < 0.20f) factor = 1.0f;
+      float pct = ((raw / factor) / base - 1.0f) * 100.0f;
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 300.0f) pct = 300.0f;
+      return pct;
+    filters:
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+
+  - platform: template
+    name: "NO2 Baseline Change"
+    id: no2_gas_index
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 60s
+    lambda: |-
+      float raw = id(no2_raw).state;
+      float base = id(no2_gas_baseline);
+      float factor = id(gas_env_factor).state;
+      if (isnan(raw) || base <= 0.01f) return 0.0f;
+      if (isnan(factor) || factor < 0.20f) factor = 1.0f;
+      float pct = ((raw / factor) / base - 1.0f) * 100.0f;
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 300.0f) pct = 300.0f;
+      return pct;
+    filters:
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+
+  - platform: template
+    name: "Gas Index"
+    id: gas_index
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 60s
+    lambda: |-
+      float co = id(co_gas_index).state;
+      float nh3 = id(nh3_gas_index).state;
+      float no2 = id(no2_gas_index).state;
+      if (isnan(co)) co = 0.0f;
+      if (isnan(nh3)) nh3 = 0.0f;
+      if (isnan(no2)) no2 = 0.0f;
+      float worst = fmaxf(co, fmaxf(nh3, no2));
+      float avg = (co + nh3 + no2) / 3.0f;
+      return worst * 0.70f + avg * 0.30f;
+
+  - platform: adc
+    pin: GPIO34
+    name: "Battery Voltage"
+    id: battery_v
+    attenuation: 12dB
+    update_interval: 10s
+    accuracy_decimals: 2
+    internal: true
+    filters:
+      - multiply: 2.0
+      - sliding_window_moving_average:
+          window_size: 6
+          send_every: 3
+      - clamp:
+          min_value: 2.8
+          max_value: 4.5
+      - lambda: |-
+          float prev = id(prev_battery_v);
+          if (prev > 0.1f) {
+            float delta = x - prev;
+            bool charging_trend = x > 3.55f && delta > 0.012f;
+            if (charging_trend) {
+              id(charge_rise_count)++;
+              id(charge_fall_count) = 0;
+            } else {
+              id(charge_fall_count)++;
+              if (id(charge_rise_count) > 1) id(charge_rise_count) -= 2;
+              else id(charge_rise_count) = 0;
+            }
+            if (id(charge_rise_count) >= 4) id(is_charging) = true;
+            if (id(charge_fall_count) >= 4 || delta < -0.010f) {
+              id(is_charging) = false;
+              id(charge_rise_count) = 0;
+            }
+          }
+          id(prev_battery_v) = x;
+          return x;
+
+  - platform: template
+    id: battery_v_clamped
+    internal: true
+    lambda: |-
+      float v = id(battery_v).state;
+      if (v < 3.30f) return 3.30f;
+      if (v > 4.20f) return 4.20f;
+      return v;
+    update_interval: 10s
+
+  - platform: template
+    name: "Battery"
+    id: battery_pct
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 15s
+    lambda: |-
+      float v = id(battery_v_clamped).state;
+      if (v >= 4.20f) return 100.0f;
+      if (v >= 4.10f) return 90.0f + (v - 4.10f) / 0.10f * 10.0f;
+      if (v >= 4.00f) return 80.0f + (v - 4.00f) / 0.10f * 10.0f;
+      if (v >= 3.90f) return 65.0f + (v - 3.90f) / 0.10f * 15.0f;
+      if (v >= 3.80f) return 50.0f + (v - 3.80f) / 0.10f * 15.0f;
+      if (v >= 3.70f) return 30.0f + (v - 3.70f) / 0.10f * 20.0f;
+      if (v >= 3.60f) return 15.0f + (v - 3.60f) / 0.10f * 15.0f;
+      if (v >= 3.50f) return 7.0f  + (v - 3.50f) / 0.10f * 8.0f;
+      if (v >= 3.30f) return (v - 3.30f) / 0.20f * 7.0f;
+      return 0.0f;
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 30s
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    id: wifi_rssi
+    update_interval: 60s
+  - platform: internal_temperature
+    name: "ESP32 Die Temp"
+    id: esp32_temp
+    update_interval: 60s
+  - platform: template
+    name: "Self-Heat Correction"
+    id: self_heat_correction
+    unit_of_measurement: "C"
+    accuracy_decimals: 2
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      float raw_t = id(temperature_raw).state;
+      float die_t = id(esp32_temp).state;
+      if (isnan(raw_t) || isnan(die_t)) return 0.0f;
+      float delta = die_t - raw_t;
+      float extra = (delta - 18.0f) * id(self_heat_strength);
+      if (extra < 0.0f) extra = 0.0f;
+      if (extra > 2.5f) extra = 2.5f;
+      return extra;
+  - platform: template
+    name: "Temperature"
+    id: temperature
+    unit_of_measurement: "C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      float raw_t = id(temperature_raw).state;
+      if (isnan(raw_t)) return NAN;
+      float dynamic = id(self_heat_correction).state;
+      if (isnan(dynamic)) dynamic = 0.0f;
+      return raw_t + id(temp_baseline_offset_c) - dynamic;
+    on_value:
+      then:
+        - lambda: |-
+            if (x < id(temp_daily_min)) id(temp_daily_min) = x;
+            if (x > id(temp_daily_max)) id(temp_daily_max) = x;
+  - platform: template
+    name: "Humidity"
+    id: humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      float raw_t = id(temperature_raw).state;
+      float raw_rh = id(humidity_raw).state;
+      float corrected_t = id(temperature).state;
+      if (isnan(raw_t) || isnan(raw_rh) || isnan(corrected_t)) return NAN;
+      const float a = 17.625f;
+      const float b = 243.04f;
+      float svp_raw = expf((a * raw_t) / (b + raw_t));
+      float vapor_pressure = (raw_rh / 100.0f) * svp_raw;
+      float svp_corrected = expf((a * corrected_t) / (b + corrected_t));
+      float corrected_rh = 100.0f * vapor_pressure / svp_corrected;
+      if (corrected_rh < 0.0f) corrected_rh = 0.0f;
+      if (corrected_rh > 100.0f) corrected_rh = 100.0f;
+      return corrected_rh;
+  - platform: homeassistant
+    name: "Outdoor Temp"
+    id: outdoor_temp
+    entity_id: "${outdoor_weather_entity}"
+    attribute: temperature
+    internal: true
+  - platform: homeassistant
+    name: "Outdoor Humidity"
+    id: outdoor_humi
+    entity_id: "${outdoor_weather_entity}"
+    attribute: humidity
+    internal: true
+
+  # Derived
+  - platform: template
+    name: "Dew Point"
+    id: dew_point
+    unit_of_measurement: "C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      float T = id(temperature).state, RH = id(humidity).state;
+      float g = (17.27f*T/(237.7f+T)) + logf(RH/100.0f);
+      return 237.7f*g/(17.27f-g);
+
+  - platform: template
+    name: "Feels Like"
+    id: feels_like
+    unit_of_measurement: "C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      float T = id(temperature).state, RH = id(humidity).state;
+      if (T < 27.0f || RH < 40.0f) return T;
+      float Tf = T*9.0f/5.0f+32.0f;
+      float HI = -42.379f+2.049f*Tf+10.143f*RH-0.2248f*Tf*RH-6.838e-3f*Tf*Tf-5.482e-2f*RH*RH+1.229e-3f*Tf*Tf*RH+8.528e-4f*Tf*RH*RH-1.99e-6f*Tf*Tf*RH*RH;
+      return (HI-32.0f)*5.0f/9.0f;
+
+  - platform: template
+    name: "PM2.5 AQI"
+    id: pm25_aqi
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      float c = id(pm25).state;
+      if (c <= 9.0f)   return (50.0f/9.0f)*c;
+      if (c <= 35.4f)  return 51.0f+(49.0f/26.3f)*(c-9.1f);
+      if (c <= 55.4f)  return 101.0f+(49.0f/19.9f)*(c-35.5f);
+      if (c <= 125.4f) return 151.0f+(49.0f/69.9f)*(c-55.5f);
+      if (c <= 225.4f) return 201.0f+(99.0f/99.9f)*(c-125.5f);
+      return 301.0f+(199.0f/99.9f)*(c-225.5f);
+
+  - platform: template
+    name: "IAQ Score"
+    id: aqi_score
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      auto interp = [](float x, float x0, float x1, float y0, float y1) -> float {
+        if (x <= x0) return y0;
+        if (x >= x1) return y1;
+        return y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
+      };
+      auto clamp_score = [](float x) -> float {
+        if (x < 0.0f) return 0.0f;
+        if (x > 100.0f) return 100.0f;
+        return x;
+      };
+
+      float pm = id(pm25).state;
+      float s_pm = 100.0f;
+      if (!isnan(pm)) {
+        if (pm <= 9.0f) s_pm = interp(pm, 0.0f, 9.0f, 100.0f, 88.0f);
+        else if (pm <= 35.4f) s_pm = interp(pm, 9.0f, 35.4f, 88.0f, 55.0f);
+        else if (pm <= 55.4f) s_pm = interp(pm, 35.4f, 55.4f, 55.0f, 35.0f);
+        else if (pm <= 125.4f) s_pm = interp(pm, 55.4f, 125.4f, 35.0f, 15.0f);
+        else s_pm = 8.0f;
+      }
+
+      float co = id(co2).state;
+      float s_co2 = 100.0f;
+      if (!isnan(co)) {
+        if (co <= 600.0f) s_co2 = 100.0f;
+        else if (co <= 800.0f) s_co2 = interp(co, 600.0f, 800.0f, 100.0f, 86.0f);
+        else if (co <= 1000.0f) s_co2 = interp(co, 800.0f, 1000.0f, 86.0f, 70.0f);
+        else if (co <= 1500.0f) s_co2 = interp(co, 1000.0f, 1500.0f, 70.0f, 42.0f);
+        else if (co <= 2000.0f) s_co2 = interp(co, 1500.0f, 2000.0f, 42.0f, 22.0f);
+        else s_co2 = 8.0f;
+      }
+
+      float v = id(voc_idx).state;
+      float s_voc = 100.0f;
+      if (!isnan(v)) {
+        if (v <= 100.0f) s_voc = 100.0f;
+        else if (v <= 150.0f) s_voc = interp(v, 100.0f, 150.0f, 100.0f, 85.0f);
+        else if (v <= 250.0f) s_voc = interp(v, 150.0f, 250.0f, 85.0f, 60.0f);
+        else if (v <= 400.0f) s_voc = interp(v, 250.0f, 400.0f, 60.0f, 35.0f);
+        else s_voc = 15.0f;
+      }
+
+      float n = id(nox_idx).state;
+      float s_nox = 100.0f;
+      if (!isnan(n)) {
+        if (n <= 1.5f) s_nox = 100.0f;
+        else if (n <= 20.0f) s_nox = interp(n, 1.5f, 20.0f, 100.0f, 88.0f);
+        else if (n <= 100.0f) s_nox = interp(n, 20.0f, 100.0f, 88.0f, 55.0f);
+        else if (n <= 250.0f) s_nox = interp(n, 100.0f, 250.0f, 55.0f, 30.0f);
+        else s_nox = 15.0f;
+      }
+
+      bool gas_base_ok = id(co_gas_baseline) > 0.01f && id(nh3_gas_baseline) > 0.01f && id(no2_gas_baseline) > 0.01f;
+      float g = id(gas_index).state;
+      float s_gas = 100.0f;
+      if (gas_base_ok && !isnan(g)) {
+        if (g <= 10.0f) s_gas = 100.0f;
+        else if (g <= 35.0f) s_gas = interp(g, 10.0f, 35.0f, 100.0f, 82.0f);
+        else if (g <= 75.0f) s_gas = interp(g, 35.0f, 75.0f, 82.0f, 58.0f);
+        else if (g <= 150.0f) s_gas = interp(g, 75.0f, 150.0f, 58.0f, 32.0f);
+        else s_gas = 15.0f;
+      }
+
+      float rh = id(humidity).state;
+      float s_humi = 100.0f;
+      if (!isnan(rh)) {
+        float dry_penalty = rh < 35.0f ? (35.0f - rh) * 2.2f : 0.0f;
+        float damp_penalty = rh > 60.0f ? (rh - 60.0f) * 2.5f : 0.0f;
+        s_humi = clamp_score(100.0f - dry_penalty - damp_penalty);
+      }
+
+      float weighted = s_pm*0.36f + s_co2*0.30f + s_voc*0.14f + s_nox*0.07f + s_gas*0.08f + s_humi*0.05f;
+      float worst = fminf(s_pm, fminf(s_co2, fminf(s_voc, fminf(s_nox, s_gas))));
+      float score = weighted * 0.65f + worst * 0.35f;
+      if (worst < 35.0f && score > 45.0f) score = 45.0f;
+      if (worst < 55.0f && score > 65.0f) score = 65.0f;
+      return clamp_score(score);
+
+  - platform: template
+    name: "Battery Hours"
+    id: battery_hrs
+    unit_of_measurement: "h"
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      float pct = id(battery_pct).state / 100.0f;
+      float ma = id(wifi_enabled) ? 150.0f : 80.0f;
+      if (id(battery_save_mode)) ma *= 0.55f;
+      return pct * ${battery_mah} / ma;
+
+text_sensor:
+  - platform: template
+    name: "Air Quality"
+    id: aqi_cat
+    update_interval: 60s
+    lambda: |-
+      float s = id(aqi_score).state;
+      if (s>=85) return {"Excellent"};
+      if (s>=70) return {"Good"};
+      if (s>=55) return {"Moderate"};
+      if (s>=40) return {"Poor"};
+      if (s>=20) return {"Unhealthy"};
+      return {"Hazardous"};
+  - platform: template
+    name: "Comfort"
+    id: comfort_level
+    update_interval: 60s
+    lambda: |-
+      float T=id(temperature).state, RH=id(humidity).state;
+      if (T<16) return {"Too Cold"};
+      if (T>30) return {"Too Hot"};
+      if (RH<25) return {"Very Dry"};
+      if (RH>70) return {"Very Humid"};
+      if (T>=19&&T<=25&&RH>=35&&RH<=60) return {"Comfortable"};
+      if (RH<35) return {"Dry"};
+      if (RH>60) return {"Humid"};
+      if (T<19) return {"Cool"};
+      return {"Warm"};
+  - platform: template
+    name: "Gas Status"
+    id: gas_status
+    update_interval: 60s
+    lambda: |-
+      if (id(co_gas_baseline) <= 0.01f || id(nh3_gas_baseline) <= 0.01f || id(no2_gas_baseline) <= 0.01f) {
+        return {"Needs baseline"};
+      }
+      float g = id(gas_index).state;
+      if (isnan(g)) return {"Waiting"};
+      if (g < 10.0f) return {"Stable"};
+      if (g < 35.0f) return {"Slight rise"};
+      if (g < 75.0f) return {"Elevated"};
+      if (g < 150.0f) return {"High"};
+      return {"Very high"};
+  - platform: template
+    name: "Last Alert"
+    id: last_alert_text
+    lambda: 'return id(last_alert_msg);'
+    update_interval: 60s
+  - platform: homeassistant
+    name: "Weather"
+    id: weather_cond
+    entity_id: "${outdoor_weather_entity}"
+    internal: true
+  - platform: wifi_info
+    ip_address:
+      name: "IP"
+      id: wifi_ip
+    ssid:
+      name: "SSID"
+      id: wifi_ssid_txt
+
+binary_sensor:
+  - platform: template
+    name: "Air Quality Alert"
+    device_class: problem
+    lambda: |-
+      return id(pm25).state > id(pm25_alert_ugm3) || id(co2).state > id(co2_alert_ppm) || id(voc_idx).state > id(voc_alert_idx);
+  - platform: template
+    name: "Charging"
+    device_class: battery_charging
+    lambda: 'return id(is_charging);'
+
+  # === HOME NAV BAR (large release targets; avoids instant back-button bounce) ===
+  - platform: touchscreen
+    name: nav_air
+    internal: true
+    x_min: 0
+    x_max: 63
+    y_min: 204
+    y_max: 240
+    page_id: page_home
+    on_release:
+      - display.page.show: page_air
+      - component.update: tft_display
+  - platform: touchscreen
+    name: nav_pm
+    internal: true
+    x_min: 64
+    x_max: 127
+    y_min: 204
+    y_max: 240
+    page_id: page_home
+    on_release:
+      - display.page.show: page_pm
+      - component.update: tft_display
+  - platform: touchscreen
+    name: nav_env
+    internal: true
+    x_min: 128
+    x_max: 191
+    y_min: 204
+    y_max: 240
+    page_id: page_home
+    on_release:
+      - display.page.show: page_env
+      - component.update: tft_display
+  - platform: touchscreen
+    name: nav_gas
+    internal: true
+    x_min: 192
+    x_max: 255
+    y_min: 204
+    y_max: 240
+    page_id: page_home
+    on_release:
+      - display.page.show: page_gas
+      - component.update: tft_display
+  - platform: touchscreen
+    name: nav_set
+    internal: true
+    x_min: 256
+    x_max: 319
+    y_min: 204
+    y_max: 240
+    page_id: page_home
+    on_release:
+      - display.page.show: page_settings
+      - component.update: tft_display
+
+  # === BACK BUTTONS (every sub-page, x:80-240 y:204-240) ===
+  - platform: touchscreen
+    name: back_air
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_air
+    on_release:
+      - display.page.show: page_home
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_pm
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_pm
+    on_release:
+      - display.page.show: page_home
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_env
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_env
+    on_release:
+      - display.page.show: page_home
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_gas
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_gas
+    on_release:
+      - display.page.show: page_home
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_settings
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_settings
+    on_release:
+      - display.page.show: page_home
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_graphs
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_graphs
+    on_release:
+      - if:
+          condition:
+            lambda: 'return id(graph_view) == 1;'
+          then:
+            - display.page.show: page_pm
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(graph_view) == 3 || id(graph_view) == 4;'
+                then:
+                  - display.page.show: page_env
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(graph_view) == 0 || id(graph_view) == 2;'
+                      then:
+                        - display.page.show: page_air
+                      else:
+                        - if:
+                            condition:
+                              lambda: 'return id(graph_view) == 5;'
+                            then:
+                              - display.page.show: page_gas
+                            else:
+                              - display.page.show: page_settings
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_system
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_system
+    on_release:
+      - display.page.show: page_settings
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_battery
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_battery
+    on_release:
+      - display.page.show: page_settings
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_co2info
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_co2_info
+    on_release:
+      - display.page.show: page_air
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_pminfo
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_pm_info
+    on_release:
+      - display.page.show: page_pm
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_cal
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_confirm_cal
+    on_release:
+      - display.page.show: page_settings
+      - component.update: tft_display
+  - platform: touchscreen
+    name: back_clean
+    internal: true
+    x_min: 80
+    x_max: 240
+    y_min: 204
+    y_max: 240
+    page_id: page_confirm_clean
+    on_release:
+      - display.page.show: page_settings
+      - component.update: tft_display
+
+  # === INFO BUTTONS on detail pages ===
+  - platform: touchscreen
+    name: info_co2
+    internal: true
+    x_min: 265
+    x_max: 315
+    y_min: 28
+    y_max: 70
+    page_id: page_air
+    on_release:
+      - display.page.show: page_co2_info
+      - component.update: tft_display
+  - platform: touchscreen
+    name: info_pm
+    internal: true
+    x_min: 265
+    x_max: 315
+    y_min: 28
+    y_max: 60
+    page_id: page_pm
+    on_release:
+      - display.page.show: page_pm_info
+      - component.update: tft_display
+  - platform: touchscreen
+    name: clean_pm_btn
+    internal: true
+    x_min: 220
+    x_max: 262
+    y_min: 28
+    y_max: 60
+    page_id: page_pm
+    on_release:
+      - sps30.start_fan_autoclean: sps30_sensor
+      - display.page.show: page_confirm_clean
+      - component.update: tft_display
+
+  # Graph shortcuts from the detail pages.
+  - platform: touchscreen
+    name: graph_from_air_co2
+    internal: true
+    x_min: 8
+    x_max: 104
+    y_min: 32
+    y_max: 82
+    page_id: page_air
+    on_release:
+      - lambda: 'id(graph_view) = 0;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: graph_from_air_voc
+    internal: true
+    x_min: 112
+    x_max: 208
+    y_min: 32
+    y_max: 82
+    page_id: page_air
+    on_release:
+      - lambda: 'id(graph_view) = 2;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: graph_from_pm
+    internal: true
+    x_min: 220
+    x_max: 312
+    y_min: 62
+    y_max: 96
+    page_id: page_pm
+    on_release:
+      - lambda: 'id(graph_view) = 1;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: graph_from_climate_temp
+    internal: true
+    x_min: 8
+    x_max: 156
+    y_min: 32
+    y_max: 132
+    page_id: page_env
+    on_release:
+      - lambda: 'id(graph_view) = 3;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: graph_from_climate_rh
+    internal: true
+    x_min: 164
+    x_max: 312
+    y_min: 32
+    y_max: 132
+    page_id: page_env
+    on_release:
+      - lambda: 'id(graph_view) = 4;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: graph_from_gas
+    internal: true
+    x_min: 10
+    x_max: 128
+    y_min: 32
+    y_max: 88
+    page_id: page_gas
+    on_release:
+      - lambda: 'id(graph_view) = 5;'
+      - display.page.show: page_graphs
+      - component.update: tft_display
+
+  # === SETTINGS BUTTONS ===
+  - platform: touchscreen
+    name: s_eco
+    internal: true
+    x_min: 10
+    x_max: 78
+    y_min: 28
+    y_max: 68
+    page_id: page_settings
+    on_release:
+      - lambda: |-
+          id(battery_save_mode) = !id(battery_save_mode);
+          if (id(battery_save_mode)) id(apply_battery_save_on).execute();
+          else id(apply_battery_save_off).execute();
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_away
+    internal: true
+    x_min: 82
+    x_max: 150
+    y_min: 28
+    y_max: 68
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(away_mode) = !id(away_mode); id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_sound
+    internal: true
+    x_min: 154
+    x_max: 222
+    y_min: 28
+    y_max: 68
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(sound_on) = !id(sound_on);'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_wifi
+    internal: true
+    x_min: 226
+    x_max: 310
+    y_min: 28
+    y_max: 68
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(wifi_enabled) = !id(wifi_enabled); id(toggle_wifi).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_timeout
+    internal: true
+    x_min: 10
+    x_max: 78
+    y_min: 68
+    y_max: 100
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(screen_timeout_on) = !id(screen_timeout_on);'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_gas_base
+    internal: true
+    x_min: 82
+    x_max: 150
+    y_min: 68
+    y_max: 100
+    page_id: page_settings
+    on_release:
+      - script.execute: set_gas_baseline
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_cleanpm
+    internal: true
+    x_min: 154
+    x_max: 222
+    y_min: 68
+    y_max: 100
+    page_id: page_settings
+    on_release:
+      - sps30.start_fan_autoclean: sps30_sensor
+      - display.page.show: page_confirm_clean
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_graphs
+    internal: true
+    x_min: 226
+    x_max: 310
+    y_min: 68
+    y_max: 100
+    page_id: page_settings
+    on_release:
+      - display.page.show: page_graphs
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_timeout_minus
+    internal: true
+    x_min: 84
+    x_max: 130
+    y_min: 106
+    y_max: 135
+    page_id: page_settings
+    on_release:
+      - lambda: |-
+          id(screen_timeout_seconds) -= 5;
+          if (id(screen_timeout_seconds) < 10) id(screen_timeout_seconds) = 10;
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_timeout_plus
+    internal: true
+    x_min: 180
+    x_max: 226
+    y_min: 106
+    y_max: 135
+    page_id: page_settings
+    on_release:
+      - lambda: |-
+          id(screen_timeout_seconds) += 5;
+          if (id(screen_timeout_seconds) > 300) id(screen_timeout_seconds) = 300;
+      - component.update: tft_display
+  - platform: touchscreen
+    name: bl30
+    internal: true
+    x_min: 15
+    x_max: 50
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(backlight_pct) = 30; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: bl60
+    internal: true
+    x_min: 55
+    x_max: 90
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(backlight_pct) = 60; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: bl80
+    internal: true
+    x_min: 95
+    x_max: 130
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(backlight_pct) = 80; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: bl100
+    internal: true
+    x_min: 135
+    x_max: 165
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(backlight_pct) = 100; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: led0
+    internal: true
+    x_min: 190
+    x_max: 218
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(led_pct) = 0; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: led30
+    internal: true
+    x_min: 222
+    x_max: 248
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(led_pct) = 30; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: led70
+    internal: true
+    x_min: 252
+    x_max: 278
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(led_pct) = 70; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: led100
+    internal: true
+    x_min: 282
+    x_max: 310
+    y_min: 128
+    y_max: 155
+    page_id: page_settings
+    on_release:
+      - lambda: 'id(led_pct) = 100; id(apply_display_settings).execute();'
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_cal
+    internal: true
+    x_min: 10
+    x_max: 105
+    y_min: 160
+    y_max: 188
+    page_id: page_settings
+    on_release:
+      - scd4x.perform_forced_calibration:
+          value: ${co2_cal_ppm}
+          id: scd41
+      - display.page.show: page_confirm_cal
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_battery
+    internal: true
+    x_min: 108
+    x_max: 205
+    y_min: 160
+    y_max: 188
+    page_id: page_settings
+    on_release:
+      - display.page.show: page_battery
+      - component.update: tft_display
+  - platform: touchscreen
+    name: s_system
+    internal: true
+    x_min: 208
+    x_max: 310
+    y_min: 160
+    y_max: 188
+    page_id: page_settings
+    on_release:
+      - display.page.show: page_system
+      - component.update: tft_display
+
+touchscreen:
+  platform: xpt2046
+  id: tft_touch
+  cs_pin: 4
+  update_interval: 50ms
+  threshold: 420
+  display: tft_display
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 0
+    y_max: 3860
+  transform:
+    mirror_x: true
+    mirror_y: true
+    swap_xy: true
+  on_touch:
+    - lambda: |-
+        ESP_LOGI("cal", "x=%d, y=%d, raw=%d,%d", touch.x, touch.y, touch.x_raw, touch.y_raw);
+    - lambda: |-
+        auto call = id(backlight).make_call();
+        call.set_state(true);
+        call.set_brightness(id(away_mode) ? 0.18f : id(backlight_pct) / 100.0f);
+        call.perform();
+    - script.execute: reset_backlight_timer
+    - script.execute: buzz_short
+
+button:
+  - platform: template
+    name: "Calibrate CO2"
+    on_press:
+      - scd4x.perform_forced_calibration:
+          value: ${co2_cal_ppm}
+          id: scd41
+  - platform: template
+    name: "Clean PM Sensor"
+    on_press:
+      - sps30.start_fan_autoclean: sps30_sensor
+  - platform: template
+    name: "Set Gas Baseline"
+    on_press:
+      - script.execute: set_gas_baseline
+
+switch:
+  - platform: template
+    name: "Battery Save"
+    lambda: 'return id(battery_save_mode);'
+    turn_on_action:
+      - lambda: 'id(battery_save_mode) = true;'
+      - script.execute: apply_battery_save_on
+    turn_off_action:
+      - lambda: 'id(battery_save_mode) = false;'
+      - script.execute: apply_battery_save_off
+  - platform: template
+    name: "Dark Mode"
+    lambda: 'return id(away_mode);'
+    turn_on_action:
+      - lambda: 'id(away_mode) = true;'
+      - script.execute: apply_display_settings
+    turn_off_action:
+      - lambda: 'id(away_mode) = false;'
+      - script.execute: apply_display_settings
+  - platform: template
+    name: "Sound"
+    lambda: 'return id(sound_on);'
+    turn_on_action:
+      - lambda: 'id(sound_on) = true;'
+    turn_off_action:
+      - lambda: 'id(sound_on) = false;'
+  - platform: template
+    name: "Deep Sleep"
+    lambda: 'return id(deep_sleep_mode);'
+    turn_on_action:
+      - globals.set:
+          id: deep_sleep_mode
+          value: 'true'
+    turn_off_action:
+      - globals.set:
+          id: deep_sleep_mode
+          value: 'false'
+
+number:
+  - platform: template
+    name: "CO2 Alert"
+    min_value: 600
+    max_value: 2500
+    step: 50
+    unit_of_measurement: "ppm"
+    lambda: 'return id(co2_alert_ppm);'
+    set_action:
+      - lambda: 'id(co2_alert_ppm) = (int)x;'
+  - platform: template
+    name: "PM2.5 Alert"
+    min_value: 5
+    max_value: 75
+    step: 1
+    unit_of_measurement: "ug/m3"
+    lambda: 'return id(pm25_alert_ugm3);'
+    set_action:
+      - lambda: 'id(pm25_alert_ugm3) = x;'
+  - platform: template
+    name: "Screen Timeout"
+    min_value: 10
+    max_value: 300
+    step: 5
+    unit_of_measurement: "s"
+    lambda: 'return id(screen_timeout_seconds);'
+    set_action:
+      - lambda: 'id(screen_timeout_seconds) = (int)x;'
+  - platform: template
+    name: "Temperature Baseline Offset"
+    min_value: -5
+    max_value: 2
+    step: 0.1
+    unit_of_measurement: "C"
+    lambda: 'return id(temp_baseline_offset_c);'
+    set_action:
+      - lambda: 'id(temp_baseline_offset_c) = x;'
+  - platform: template
+    name: "Self-Heat Strength"
+    min_value: 0
+    max_value: 0.15
+    step: 0.01
+    lambda: 'return id(self_heat_strength);'
+    set_action:
+      - lambda: 'id(self_heat_strength) = x;'
+
+script:
+  - id: force_boot_brightness
+    then:
+      - lambda: |-
+          id(backlight_pct) = 100.0f;
+          auto c = id(backlight).make_call();
+          c.set_state(true);
+          c.set_brightness(1.0f);
+          c.perform();
+  - id: apply_display_settings
+    then:
+      - lambda: |-
+          float bl = id(away_mode) ? 0.0f : (id(backlight_pct) / 100.0f);
+          auto c1 = id(backlight).make_call();
+          c1.set_state(!id(away_mode)); c1.set_brightness(bl); c1.perform();
+          float lp = id(away_mode) ? 0.0f : (id(led_pct) / 100.0f);
+          auto c2 = id(status_led).make_call();
+          c2.set_state(!id(away_mode)); c2.set_brightness(lp); c2.perform();
+  - id: reset_backlight_timer
+    mode: restart
+    then:
+      - delay: !lambda "return (uint32_t) id(screen_timeout_seconds) * 1000;"
+      - lambda: |-
+          if (id(screen_timeout_on) || id(away_mode)) {
+            auto c = id(backlight).make_call();
+            c.set_state(false); c.perform();
+          }
+  - id: buzz_short
+    then:
+      - if:
+          condition:
+            lambda: 'return id(sound_on);'
+          then:
+            - output.turn_on: buzzer_pwm
+            - output.ledc.set_frequency:
+                id: buzzer_pwm
+                frequency: 1000Hz
+            - output.set_level:
+                id: buzzer_pwm
+                level: 50%
+            - delay: 100ms
+            - output.turn_off: buzzer_pwm
+  - id: buzz_double
+    then:
+      - script.execute: buzz_short
+      - delay: 180ms
+      - script.execute: buzz_short
+  - id: set_gas_baseline
+    then:
+      - lambda: |-
+          float factor = id(gas_env_factor).state;
+          if (isnan(factor) || factor < 0.20f) factor = 1.0f;
+          if (!isnan(id(co_raw).state) && id(co_raw).state > 0.0f) {
+            id(co_gas_baseline) = id(co_raw).state / factor;
+          }
+          if (!isnan(id(nh3_raw).state) && id(nh3_raw).state > 0.0f) {
+            id(nh3_gas_baseline) = id(nh3_raw).state / factor;
+          }
+          if (!isnan(id(no2_raw).state) && id(no2_raw).state > 0.0f) {
+            id(no2_gas_baseline) = id(no2_raw).state / factor;
+          }
+  - id: check_alerts
+    then:
+      - lambda: |-
+          float now = id(uptime_sensor).state;
+          if (now - id(last_alert_ts) < 1800.0f) return;
+          if (id(co2).state > 2000 || id(pm25).state > 55) {
+            id(buzz_double).execute();
+            id(last_alert_ts) = now;
+            char b[48]; snprintf(b, 48, "DANGER CO2=%.0f PM=%.1f", id(co2).state, id(pm25).state);
+            id(last_alert_msg) = std::string(b);
+          } else if (id(co2).state > id(co2_alert_ppm) || id(pm25).state > id(pm25_alert_ugm3)) {
+            id(buzz_short).execute();
+            id(last_alert_ts) = now;
+            char b[48]; snprintf(b, 48, "Alert CO2=%.0f PM=%.1f", id(co2).state, id(pm25).state);
+            id(last_alert_msg) = std::string(b);
+          }
+  - id: update_led
+    then:
+      - lambda: |-
+          if (id(away_mode)) return;
+          if (id(led_pct) < 1) return;
+          float s = id(aqi_score).state;
+          float br = id(led_pct) / 100.0f;
+          auto c = id(status_led).make_call();
+          c.set_state(true); c.set_brightness(br);
+          if (s>=85)      c.set_rgb(0,1,0);
+          else if (s>=70) c.set_rgb(0.4,1,0);
+          else if (s>=55) c.set_rgb(1,1,0);
+          else if (s>=40) c.set_rgb(1,0.5,0);
+          else            c.set_rgb(1,0,0);
+          c.perform();
+  - id: apply_battery_save_on
+    then:
+      - lambda: |-
+          id(backlight_pct) = 40; id(led_pct) = 0;
+          id(screen_timeout_on) = true;
+          id(apply_display_settings).execute();
+  - id: apply_battery_save_off
+    then:
+      - lambda: |-
+          id(backlight_pct) = 80; id(led_pct) = 30;
+          id(apply_display_settings).execute();
+  - id: toggle_wifi
+    then:
+      - if:
+          condition:
+            lambda: 'return id(wifi_enabled);'
+          then:
+            - wifi.enable:
+          else:
+            - wifi.disable:
+
+interval:
+  - interval: 30s
+    then:
+      - script.execute: check_alerts
+      - script.execute: update_led
+  - interval: 10min
+    then:
+      - lambda: 'id(voc_10min_ago) = id(voc_idx).state;'
+  - interval: 5min
+    then:
+      - lambda: |-
+          float factor = id(gas_env_factor).state;
+          if (isnan(factor) || factor < 0.20f) factor = 1.0f;
+          if (id(uptime_sensor).state > 1200.0f &&
+              (id(co_gas_baseline) <= 0.01f || id(nh3_gas_baseline) <= 0.01f || id(no2_gas_baseline) <= 0.01f)) {
+            id(set_gas_baseline).execute();
+            return;
+          }
+          if (id(co_gas_baseline) <= 0.01f || id(nh3_gas_baseline) <= 0.01f || id(no2_gas_baseline) <= 0.01f) return;
+          if (id(gas_index).state > 10.0f) return;
+          float co = id(co_raw).state / factor;
+          float nh3 = id(nh3_raw).state / factor;
+          float no2 = id(no2_raw).state / factor;
+          if (!isnan(co) && co > 0.0f) {
+            float a = co < id(co_gas_baseline) ? 0.010f : 0.002f;
+            id(co_gas_baseline) = id(co_gas_baseline) * (1.0f - a) + co * a;
+          }
+          if (!isnan(nh3) && nh3 > 0.0f) {
+            float a = nh3 < id(nh3_gas_baseline) ? 0.010f : 0.002f;
+            id(nh3_gas_baseline) = id(nh3_gas_baseline) * (1.0f - a) + nh3 * a;
+          }
+          if (!isnan(no2) && no2 > 0.0f) {
+            float a = no2 < id(no2_gas_baseline) ? 0.010f : 0.002f;
+            id(no2_gas_baseline) = id(no2_gas_baseline) * (1.0f - a) + no2 * a;
+          }
+  - interval: 60s
+    then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          if (t.is_valid() && t.hour == 0 && t.minute == 0) {
+            id(co2_daily_min) = 9999; id(co2_daily_max) = -1;
+            id(pm25_daily_min) = 9999; id(pm25_daily_max) = -1;
+            id(temp_daily_min) = 999; id(temp_daily_max) = -999;
+          }
+  - interval: 60s
+    then:
+      - lambda: |-
+          if (!id(is_charging) && id(battery_pct).state < 15 && !id(battery_save_mode)) {
+            id(battery_save_mode) = true; id(apply_battery_save_on).execute();
+          }
+          if (id(is_charging) && id(battery_save_mode)) {
+            id(battery_save_mode) = false; id(apply_battery_save_off).execute();
+          }
+  - interval: 40s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(deep_sleep_mode);'
+          then:
+            - lambda: 'id(led_pct) = 0; id(apply_display_settings).execute();'
+            - delay: 5s
+            - deep_sleep.enter: deep_sleep_1
+
+# Display pages are kept in the main YAML because the touchscreen coordinate
+# handlers above reference page ids directly.
+display:
+  - platform: ili9xxx
+    id: tft_display
+    model: ILI9341
+    cs_pin: 14
+    dc_pin: 25
+    reset_pin:
+      number: 1
+      allow_other_uses: true
+    transform:
+      mirror_x: true
+      mirror_y: true
+      swap_xy: true
+    dimensions:
+      height: 240
+      width: 320
+    invert_colors: false
+    color_palette: 8BIT
+    update_interval: 3s
+
+    pages:
+      - id: page_boot
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.image(10, 50, id(img_logo));
+
+      - id: page_home
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto PANEL = Color(15,18,28);
+          auto PANEL2 = Color(12,24,33);
+          auto LINE = Color(45,54,72);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          auto MUTED = Color(86,96,112);
+          it.fill(BG);
+
+          it.filled_rectangle(0, 0, 320, 20, Color(12,15,24));
+          float rssi = id(wifi_rssi).state;
+          int bars = rssi>-55?4:rssi>-67?3:rssi>-78?2:rssi>-89?1:0;
+          for (int b=0; b<4; b++) {
+            it.filled_rectangle(6+b*6, 18-(4+b*3), 4, 4+b*3, b<bars?Color(0,190,220):Color(40,45,55));
+          }
+          auto t = id(ha_time).now();
+          if (t.is_valid()) it.strftime(160, 10, id(f_small), W, TextAlign::CENTER, "%H:%M", t);
+          float bp = id(battery_pct).state;
+          float bp_draw = bp;
+          if (isnan(bp_draw)) bp_draw = 0.0f;
+          if (bp_draw < 0.0f) bp_draw = 0.0f;
+          if (bp_draw > 100.0f) bp_draw = 100.0f;
+          Color bc = bp_draw<15?Color(255,40,40):bp_draw<35?Color(255,140,0):Color(40,210,80);
+          int bbx = 274;
+          int bby = 3;
+          int bbw = 32;
+          int bbh = 14;
+          int capw = 4;
+          it.rectangle(bbx, bby, bbw, bbh, bc);
+          it.filled_rectangle(bbx + bbw, bby + 4, capw, bbh - 8, bc);
+          int fillw = (int)((bbw - 4) * bp_draw / 100.0f);
+          if (fillw < 2 && bp_draw > 0.0f) fillw = 2;
+          it.filled_rectangle(bbx + 2, bby + 2, fillw, bbh - 4, bc);
+          it.printf(bbx + bbw / 2, bby + 8, id(f_small), Color(255,255,255), TextAlign::CENTER, "%.0f%%", bp_draw);
+          if (id(is_charging)) {
+            it.print(312, 10, id(f_small), Color(40,210,80), TextAlign::CENTER_RIGHT, "CHG");
+          }
+
+          float sc = id(aqi_score).state;
+          Color hc;
+          const char* cat;
+          if      (sc>=85) { hc=Color(0,200,60);  cat="Excellent"; }
+          else if (sc>=70) { hc=Color(120,220,0);  cat="Good"; }
+          else if (sc>=55) { hc=Color(255,220,0);  cat="Moderate"; }
+          else if (sc>=40) { hc=Color(255,120,0);  cat="Poor"; }
+          else if (sc>=20) { hc=Color(255,30,30);  cat="Unhealthy"; }
+          else             { hc=Color(140,0,60);    cat="Hazardous"; }
+          float co2v = id(co2).state;
+          float pmv = id(pm25).state;
+          float vocv = id(voc_idx).state;
+          float gasv = id(gas_index).state;
+          if (isnan(gasv)) gasv = 0.0f;
+          const char* cause = "Balanced";
+          bool gas_base_ok = id(co_gas_baseline) > 0.01f && id(nh3_gas_baseline) > 0.01f && id(no2_gas_baseline) > 0.01f;
+          if (!isnan(pmv) && pmv > id(pm25_alert_ugm3)) cause = "PM2.5 is driving score";
+          else if (!isnan(co2v) && co2v > id(co2_alert_ppm)) cause = "CO2 is driving score";
+          else if (!isnan(vocv) && vocv > id(voc_alert_idx)) cause = "VOC is driving score";
+          else if (!isnan(id(nox_idx).state) && id(nox_idx).state > 100) cause = "NOx is elevated";
+          else if (gas_base_ok && gasv > 35.0f) cause = "Gas trend is rising";
+          else if (!isnan(id(humidity).state) && (id(humidity).state < 30 || id(humidity).state > 70)) cause = "Humidity is outside range";
+          it.filled_rectangle(8, 26, 304, 54, PANEL);
+          it.rectangle(8, 26, 304, 54, LINE);
+          it.filled_rectangle(8, 26, 5, 54, hc);
+          it.print(16, 34, id(f_small), DIM, "Air quality");
+          it.printf(23, 57, id(f_med), hc, "%.0f", sc);
+          it.print(78, 49, id(f_body), W, cat);
+          it.printf(78, 65, id(f_small), DIM, "%s", cause);
+          int meter_w = (int)(sc * 2.1f);
+          if (meter_w < 0) meter_w = 0;
+          if (meter_w > 210) meter_w = 210;
+          it.filled_rectangle(96, 33, 210, 5, Color(33,39,52));
+          it.filled_rectangle(96, 33, meter_w, 5, hc);
+
+          auto climate_card = [&](int x, const char* title, float temp, float rh, Color accent, const char* detail) {
+            it.filled_rectangle(x, 84, 148, 56, PANEL2);
+            it.rectangle(x, 84, 148, 56, LINE);
+            it.print(x+5, 90, id(f_small), DIM, title);
+            it.printf(x+74, 109, id(f_med), accent, TextAlign::CENTER, "%.1fC", temp);
+            it.printf(x+74, 130, id(f_small), DIM, TextAlign::CENTER, "%.0f%% RH", rh);
+            if (detail != nullptr) it.printf(x+140, 90, id(f_small), MUTED, TextAlign::RIGHT, "%s", detail);
+          };
+          climate_card(8, "Indoor", id(temperature).state, id(humidity).state, Color(240,100,60), nullptr);
+          const char* wx = id(weather_cond).has_state() ? id(weather_cond).state.c_str() : nullptr;
+          if (id(outdoor_temp).has_state()) {
+            climate_card(164, "Outdoor", id(outdoor_temp).state, id(outdoor_humi).state, Color(90,160,230), wx);
+          } else {
+            it.filled_rectangle(164, 84, 148, 56, PANEL2);
+            it.rectangle(164, 84, 148, 56, LINE);
+            it.print(169, 90, id(f_small), DIM, "Outdoor");
+            it.print(238, 114, id(f_small), MUTED, TextAlign::CENTER, "waiting");
+          }
+
+          auto tile = [&](int x, const char* title, const char* unit, float value, Color accent, bool one_decimal) {
+            it.filled_rectangle(x, 144, 97, 42, PANEL);
+            it.rectangle(x, 144, 97, 42, LINE);
+            it.print(x+5, 150, id(f_small), DIM, title);
+            it.print(x+94, 171, id(f_small), MUTED, TextAlign::RIGHT, unit);
+            if (isnan(value)) {
+              it.print(x+48, 169, id(f_body), MUTED, TextAlign::CENTER, "--");
+            } else if (one_decimal) {
+              if (value >= 100.0f) {
+                it.printf(x+48, 169, id(f_body), accent, TextAlign::CENTER, "%.1f", value);
+              } else {
+                it.printf(x+48, 169, id(f_med), accent, TextAlign::CENTER, "%.1f", value);
+              }
+            } else if (value >= 1000.0f) {
+              it.printf(x+48, 169, id(f_body), accent, TextAlign::CENTER, "%.0f", value);
+            } else {
+              it.printf(x+48, 169, id(f_med), accent, TextAlign::CENTER, "%.0f", value);
+            }
+          };
+          Color co2c = co2v<800?Color(40,200,80):co2v<1000?Color(255,220,0):co2v<1500?Color(255,120,0):Color(255,40,40);
+          Color pmc = pmv<9?Color(40,200,80):pmv<35?Color(255,220,0):pmv<55?Color(255,120,0):Color(255,40,40);
+          Color vc = vocv<100?Color(40,200,80):vocv<200?Color(255,220,0):vocv<350?Color(255,120,0):Color(255,40,40);
+          tile(8, "CO2", "ppm", co2v, co2c, false);
+          tile(111, "PM2.5", "ug", pmv, pmc, true);
+          tile(214, "VOC", "idx", vocv, vc, false);
+
+          if (gas_base_ok) it.printf(10, 196, id(f_small), MUTED, "Gas trend %+.0f%%", gasv);
+          else it.print(10, 196, id(f_small), MUTED, "Gas baseline needed");
+
+          it.filled_rectangle(0, 206, 320, 34, Color(12,15,24));
+          int nw = 64;
+          const char* labels[] = {"Air", "PM", "Climate", "Gas", "More"};
+          Color nc[] = {Color(105,70,160), Color(0,95,150), Color(180,70,45), Color(145,105,20), Color(30,85,130)};
+          for (int i=0; i<5; i++) {
+            it.filled_rectangle(i*nw+3, 210, nw-6, 25, Color(18,22,32));
+            it.rectangle(i*nw+3, 210, nw-6, 25, nc[i]);
+            it.print(i*nw + nw/2, 223, id(f_small), W, TextAlign::CENTER, labels[i]);
+          }
+
+      - id: page_air
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto PANEL = Color(15,18,28);
+          auto LINE = Color(55,46,78);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          it.fill(BG);
+          it.filled_rectangle(0, 0, 320, 24, Color(64,38,104));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "Air");
+          float co2v = id(co2).state;
+          float tvocv = id(tvoc_ccs).state;
+          float eco2v = id(eco2_ccs).state;
+          Color c = co2v<800?Color(40,200,80):co2v<1000?Color(255,220,0):co2v<1500?Color(255,120,0):Color(255,40,40);
+          const char* lbl = co2v<600?"Excellent":co2v<800?"Good":co2v<1000?"Moderate":co2v<1500?"Poor":"Bad";
+          auto small_card = [&](int x, const char* label, float val, const char* unit, Color accent) {
+            it.filled_rectangle(x, 32, 96, 52, PANEL);
+            it.rectangle(x, 32, 96, 52, LINE);
+            it.print(x+5, 34, id(f_small), DIM, label);
+            if (isnan(val)) {
+              it.print(x+48, 63, id(f_body), DIM, TextAlign::CENTER, "--");
+            } else if (val >= 1000.0f) {
+              it.printf(x+48, 63, id(f_body), accent, TextAlign::CENTER, "%.0f", val);
+            } else {
+              it.printf(x+48, 63, id(f_med), accent, TextAlign::CENTER, "%.0f", val);
+            }
+            it.print(x+90, 66, id(f_small), DIM, TextAlign::RIGHT, unit);
+          };
+          small_card(8, "CO2", co2v, "ppm", c);
+          small_card(112, "VOC", id(voc_idx).state, "idx", Color(178,118,230));
+          small_card(216, "NOx", id(nox_idx).state, "idx", Color(110,180,230));
+          it.printf(12, 94, id(f_small), c, "CO2 %s  High %.0f  Low %.0f  Alert %.0f", lbl, id(co2_daily_max)>0?id(co2_daily_max):0, id(co2_daily_min)<9000?id(co2_daily_min):0, (float)id(co2_alert_ppm));
+          if (isnan(tvocv) || isnan(eco2v)) {
+            it.print(12, 109, id(f_small), DIM, "CCS811 waiting for valid reading");
+          } else {
+            it.printf(12, 109, id(f_small), DIM, "CCS811 TVOC %.0f ppb  eCO2 %.0f ppm", tvocv, eco2v);
+          }
+          it.graph(16, 126, id(g_co2_compact));
+          it.print(16, 207, id(f_small), DIM, "4h");
+          it.print(292, 207, id(f_small), DIM, TextAlign::RIGHT, "now");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(64,38,104));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_pm
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto PANEL = Color(15,18,28);
+          auto LINE = Color(38,70,92);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          it.fill(BG);
+          it.filled_rectangle(0, 0, 320, 24, Color(0,75,120));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "Particles");
+          it.filled_rectangle(8, 32, 202, 60, PANEL);
+          it.rectangle(8, 32, 202, 60, LINE);
+          Color pmc = id(pm25).state<9?Color(40,200,80):id(pm25).state<35?Color(255,220,0):id(pm25).state<55?Color(255,120,0):Color(255,40,40);
+          it.print(18, 44, id(f_small), DIM, "PM2.5");
+          it.printf(88, 64, id(f_large), pmc, TextAlign::CENTER, "%.1f", id(pm25).state);
+          it.print(88, 81, id(f_small), DIM, TextAlign::CENTER, "ug/m3");
+          it.printf(198, 50, id(f_small), DIM, TextAlign::RIGHT, "AQI %.0f", id(pm25_aqi).state);
+          it.printf(198, 70, id(f_small), DIM, TextAlign::RIGHT, "Limit %.0f", id(pm25_alert_ugm3));
+          if (!id(pm_warmed_up)) it.print(198, 84, id(f_small), Color(255,180,0), TextAlign::RIGHT, "PM warmup");
+          it.filled_rectangle(220, 32, 42, 26, Color(18,22,32));
+          it.rectangle(220, 32, 42, 26, Color(0,120,175));
+          it.print(241, 45, id(f_small), W, TextAlign::CENTER, "Clean");
+          it.filled_rectangle(266, 32, 46, 26, Color(18,22,32));
+          it.rectangle(266, 32, 46, 26, Color(0,120,175));
+          it.print(289, 45, id(f_small), W, TextAlign::CENTER, "Info");
+          it.filled_rectangle(220, 64, 92, 26, Color(18,22,32));
+          it.rectangle(220, 64, 92, 26, Color(0,140,205));
+          it.print(266, 77, id(f_small), W, TextAlign::CENTER, "Graph");
+          auto pm_chip = [&](int x, const char* label, float value) {
+            it.filled_rectangle(x, 100, 94, 24, Color(12,20,28));
+            it.rectangle(x, 100, 94, 24, Color(24,74,104));
+            it.print(x+7, 107, id(f_small), DIM, label);
+            if (isnan(value)) {
+              it.print(x+86, 107, id(f_small), DIM, TextAlign::RIGHT, "--");
+            } else {
+              it.printf(x+86, 107, id(f_small), Color(0,190,220), TextAlign::RIGHT, "%.1f", value);
+            }
+          };
+          pm_chip(8, "PM1", id(pm1).state);
+          pm_chip(113, "PM4", id(pm4).state);
+          pm_chip(218, "PM10", id(pm10).state);
+          if (isnan(id(pm_size).state)) it.print(10, 137, id(f_small), DIM, "Size --");
+          else it.printf(10, 137, id(f_small), DIM, "Size %.2fum", id(pm_size).state);
+          it.print(100, 137, id(f_small), DIM, "Counts");
+          it.printf(148, 137, id(f_small), Color(160,190,210), ".5 %.0f  1 %.0f  2.5 %.0f  10 %.0f", id(pm05_num).state, id(pm10_num).state, id(pm25_num).state, id(pm100_num).state);
+          it.graph(16, 152, id(g_pm_compact));
+          it.print(16, 206, id(f_small), DIM, "4h");
+          it.print(298, 206, id(f_small), DIM, TextAlign::RIGHT, "now");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(0,75,120));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_env
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto PANEL = Color(15,18,28);
+          auto LINE = Color(72,48,42);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          it.fill(BG);
+          it.filled_rectangle(0, 0, 320, 24, Color(160,58,38));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "Climate");
+          float T = id(temperature).state;
+          float RH = id(humidity).state;
+          float feels = id(feels_like).state;
+          float dew = id(dew_point).state;
+          it.filled_rectangle(8, 32, 148, 100, PANEL);
+          it.rectangle(8, 32, 148, 100, LINE);
+          it.print(13, 38, id(f_small), DIM, "Indoor");
+          it.printf(82, 62, id(f_large), Color(240,100,60), TextAlign::CENTER, "%.1fC", T);
+          it.printf(82, 83, id(f_small), Color(0,170,220), TextAlign::CENTER, "%.0f%% RH", RH);
+          if (isnan(dew)) it.printf(82, 105, id(f_small), W, TextAlign::CENTER, "Feels %.1fC  Dew --", feels);
+          else it.printf(82, 105, id(f_small), W, TextAlign::CENTER, "Feels %.1fC  Dew %.1fC", feels, dew);
+          it.printf(82, 119, id(f_small), DIM, TextAlign::CENTER, "%s", id(comfort_level).state.c_str());
+          it.filled_rectangle(164, 32, 148, 100, PANEL);
+          it.rectangle(164, 32, 148, 100, Color(36,65,92));
+          it.print(169, 38, id(f_small), DIM, "Outdoor");
+          if (id(outdoor_temp).has_state()) {
+            it.printf(238, 62, id(f_large), Color(90,160,230), TextAlign::CENTER, "%.1fC", id(outdoor_temp).state);
+            it.printf(238, 83, id(f_small), Color(90,160,230), TextAlign::CENTER, "%.0f%% RH", id(outdoor_humi).state);
+            if (id(weather_cond).has_state()) it.printf(238, 108, id(f_small), DIM, TextAlign::CENTER, "%s", id(weather_cond).state.c_str());
+          } else {
+            it.print(238, 83, id(f_small), DIM, TextAlign::CENTER, "waiting");
+          }
+          it.print(10, 142, id(f_small), DIM, "Indoor humidity band");
+          it.filled_rectangle(10, 156, 300, 8, Color(30,35,50));
+          int rhw = (int)(RH/100.0f*300.0f);
+          if (rhw < 0) rhw = 0;
+          if (rhw > 300) rhw = 300;
+          it.filled_rectangle(10, 156, rhw, 8, RH<30||RH>70?Color(255,120,0):Color(0,160,220));
+          it.rectangle(115, 154, 95, 12, Color(60,220,80));
+          it.printf(10, 181, id(f_small), DIM, "Indoor high %.1fC  low %.1fC", id(temp_daily_max)<900?id(temp_daily_max):0, id(temp_daily_min)<900?id(temp_daily_min):0);
+          it.printf(10, 197, id(f_small), DIM, "Indoor correction %.2fC  manual %.1fC", id(self_heat_correction).state, id(temp_baseline_offset_c));
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(160,58,38));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_gas
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto PANEL = Color(15,18,28);
+          auto LINE = Color(76,64,35);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          it.fill(BG);
+          it.filled_rectangle(0, 0, 320, 24, Color(130,88,22));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "Gas");
+          bool base_ok = id(co_gas_baseline) > 0.01f && id(nh3_gas_baseline) > 0.01f && id(no2_gas_baseline) > 0.01f;
+          float gasv = id(gas_index).state;
+          if (isnan(gasv)) gasv = 0.0f;
+          it.filled_rectangle(10, 32, 118, 56, PANEL);
+          it.rectangle(10, 32, 118, 56, LINE);
+          it.print(15, 38, id(f_small), DIM, "Gas index");
+          it.printf(69, 68, id(f_med), Color(255,165,45), TextAlign::CENTER, "%.0f%%", gasv);
+          it.filled_rectangle(136, 32, 174, 56, PANEL);
+          it.rectangle(136, 32, 174, 56, LINE);
+          it.print(141, 38, id(f_small), DIM, "Status");
+          it.print(223, 68, id(f_body), W, TextAlign::CENTER, id(gas_status).state.c_str());
+          it.print(10, 101, id(f_small), Color(205,168,78), base_ok ? "Baseline trend, not exact ppm." : "Set clean-air baseline from More.");
+          auto gas_row = [&](int y, const char* label, float pct, Color accent) {
+            if (isnan(pct)) pct = 0.0f;
+            int bw = (int)(pct * 1.6f);
+            if (bw < 2) bw = 2;
+            if (bw > 160) bw = 160;
+            Color warn = pct < 10 ? Color(40,200,80) : pct < 35 ? Color(255,220,0) : pct < 75 ? Color(255,130,0) : Color(255,50,40);
+            it.print(14, y, id(f_small), accent, label);
+            it.filled_rectangle(72, y-5, 164, 10, Color(27,31,42));
+            it.rectangle(72, y-5, 164, 10, Color(50,55,70));
+            it.filled_rectangle(74, y-3, bw, 6, warn);
+            it.printf(296, y, id(f_small), W, TextAlign::RIGHT, "+%.0f%%", pct);
+          };
+          if (!base_ok) {
+            it.print(14, 122, id(f_small), W, "1. Let the unit warm up for 20 min.");
+            it.print(14, 140, id(f_small), W, "2. Use normal clean room air.");
+            it.print(14, 158, id(f_small), W, "3. Tap More > Gas Base.");
+            it.print(14, 180, id(f_small), DIM, "It auto-seeds once after warmup.");
+          } else {
+            gas_row(118, "CO", id(co_gas_index).state, Color(255,160,0));
+            gas_row(140, "NH3", id(nh3_gas_index).state, Color(220,210,40));
+            gas_row(162, "NO2", id(no2_gas_index).state, Color(255,110,20));
+            it.graph(16, 178, id(g_co_gas));
+            it.print(16, 207, id(f_small), DIM, "4h");
+            it.print(298, 207, id(f_small), DIM, TextAlign::RIGHT, "now");
+          }
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(130,88,22));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_settings
+        lambda: |-
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          auto PANEL = Color(15,18,28);
+          auto OFF = Color(44,50,64);
+          auto LINE = Color(48,60,78);
+          it.fill(Color(7,9,14));
+          it.filled_rectangle(0, 0, 320, 24, Color(25,72,112));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "More");
+          auto btn = [&](int x, int y, int w, int h, bool on, Color accent, const char* l1, const char* l2) {
+            it.filled_rectangle(x, y, w, h, on ? Color(22,32,42) : OFF);
+            it.rectangle(x, y, w, h, on ? accent : LINE);
+            if (on) it.filled_rectangle(x, y, 4, h, accent);
+            it.print(x+w/2, y+h/2-6, id(f_small), W, TextAlign::CENTER, l1);
+            it.print(x+w/2, y+h/2+6, id(f_small), on ? accent : DIM, TextAlign::CENTER, l2);
+          };
+          btn(10, 30, 68, 32, id(battery_save_mode), Color(0,180,95), "Eco", id(battery_save_mode)?"On":"Off");
+          btn(82, 30, 68, 32, id(away_mode), Color(0,150,210), "Dark", id(away_mode)?"On":"Off");
+          btn(154,30, 68, 32, id(sound_on), Color(100,180,60), "Sound", id(sound_on)?"On":"Mute");
+          btn(226,30, 84, 32, id(wifi_enabled), Color(0,120,220), "Wi-Fi", id(wifi_enabled)?"On":"Off");
+          btn(10, 68, 68, 32, id(screen_timeout_on), Color(0,165,210), "Timeout", id(screen_timeout_on)?"On":"Off");
+          btn(82, 68, 68, 32, true, Color(220,150,45), "Gas", "Base");
+          btn(154,68, 68, 32, true, Color(0,110,170), "Clean", "PM");
+          btn(226,68, 84, 32, true, Color(70,125,190), "Graphs", "4h");
+          it.filled_rectangle(10, 106, 300, 28, PANEL);
+          it.rectangle(10, 106, 300, 28, LINE);
+          it.print(20, 120, id(f_small), DIM, "Timeout");
+          it.filled_rectangle(84, 111, 46, 18, Color(26,30,40));
+          it.rectangle(84, 111, 46, 18, Color(0,165,210));
+          it.print(107, 120, id(f_body), W, TextAlign::CENTER, "-");
+          it.printf(155, 120, id(f_body), W, TextAlign::CENTER, "%ds", id(screen_timeout_seconds));
+          it.filled_rectangle(180, 111, 46, 18, Color(26,30,40));
+          it.rectangle(180, 111, 46, 18, Color(0,165,210));
+          it.print(203, 120, id(f_body), W, TextAlign::CENTER, "+");
+          it.printf(302, 120, id(f_small), DIM, TextAlign::RIGHT, "%s", id(screen_timeout_on)?"active":"disabled");
+          it.print(10, 144, id(f_small), DIM, "Screen");
+          int bls[] = {30,60,80,100};
+          for (int i=0;i<4;i++) {
+            Color dot = (int)id(backlight_pct)==bls[i]?Color(0,200,240):Color(58,64,78);
+            it.filled_circle(55+i*30, 151, 6, dot);
+            it.printf(55+i*30, 164, id(f_small), DIM, TextAlign::CENTER, "%d", bls[i]);
+          }
+          it.print(188, 144, id(f_small), DIM, "LED");
+          int lls[] = {0,30,70,100};
+          for (int i=0;i<4;i++) {
+            Color dot = (int)id(led_pct)==lls[i]?Color(0,200,240):Color(58,64,78);
+            it.filled_circle(220+i*24, 151, 6, dot);
+          }
+          it.filled_rectangle(10, 174, 95, 26, Color(24,28,38));
+          it.rectangle(10, 174, 95, 26, Color(105,70,160));
+          it.print(57, 187, id(f_small), W, TextAlign::CENTER, "Cal CO2");
+          it.filled_rectangle(108, 174, 97, 26, Color(24,28,38));
+          it.rectangle(108, 174, 97, 26, Color(30,140,65));
+          it.print(156, 187, id(f_small), W, TextAlign::CENTER, "Battery");
+          it.filled_rectangle(208, 174, 102, 26, Color(24,28,38));
+          it.rectangle(208, 174, 102, 26, Color(80,90,115));
+          it.print(259, 187, id(f_small), W, TextAlign::CENTER, "System");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(25,72,112));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_graphs
+        lambda: |-
+          auto BG = Color(7,9,14);
+          auto W = Color(232,236,242);
+          auto DIM = Color(135,145,160);
+          auto LINE = Color(48,60,78);
+          it.fill(BG);
+          it.filled_rectangle(0, 0, 320, 24, Color(38,76,112));
+          it.print(14, 12, id(f_body), W, TextAlign::CENTER_LEFT, "Graphs");
+          Color accents[] = {Color(165,105,230), Color(0,180,220), Color(178,118,230), Color(240,100,60), Color(0,170,220), Color(255,165,45)};
+          const int gx = 52;
+          const int gy = 76;
+          const int gw = 252;
+          const int gh = 102;
+          auto y_for = [&](float v, float minv, float maxv) -> int {
+            if (v < minv) v = minv;
+            if (v > maxv) v = maxv;
+            return gy + gh - (int)(((v - minv) / (maxv - minv)) * gh);
+          };
+          auto axis = [&](float minv, float midv, float maxv, const char* unit) {
+            it.printf(46, gy, id(f_small), DIM, TextAlign::CENTER_RIGHT, "%.0f", maxv);
+            it.printf(46, y_for(midv, minv, maxv), id(f_small), DIM, TextAlign::CENTER_RIGHT, "%.0f", midv);
+            it.printf(46, gy + gh, id(f_small), DIM, TextAlign::CENTER_RIGHT, "%.0f", minv);
+            it.print(46, gy + gh + 12, id(f_small), DIM, TextAlign::CENTER_RIGHT, unit);
+          };
+          auto header = [&](Color accent, const char* title, const char* right) {
+            it.filled_rectangle(8, 30, 304, 34, Color(13,17,26));
+            it.rectangle(8, 30, 304, 34, Color(36,46,62));
+            it.print(18, 47, id(f_body), accent, TextAlign::CENTER_LEFT, title);
+            it.print(304, 47, id(f_small), DIM, TextAlign::CENTER_RIGHT, right);
+          };
+          int gv = id(graph_view);
+          if (gv < 0 || gv > 5) gv = 0;
+          if (gv == 0) {
+            char right[32];
+            snprintf(right, sizeof(right), "H %.0f  L %.0f", id(co2_daily_max)>0?id(co2_daily_max):0, id(co2_daily_min)<9000?id(co2_daily_min):0);
+            char title[32];
+            snprintf(title, sizeof(title), "CO2 %.0f ppm", id(co2).state);
+            header(accents[0], title, right);
+            it.graph(gx, gy, id(g_co2));
+            axis(400, 1000, 3000, "ppm");
+          } else if (gv == 1) {
+            char right[24];
+            snprintf(right, sizeof(right), "AQI %.0f", id(pm25_aqi).state);
+            char title[32];
+            snprintf(title, sizeof(title), "PM2.5 %.1f ug/m3", id(pm25).state);
+            header(accents[1], title, right);
+            it.graph(gx, gy, id(g_pm));
+            axis(0, 35, 72, "ug");
+          } else if (gv == 2) {
+            float vd = id(voc_idx).state - id(voc_10min_ago);
+            char right[24];
+            snprintf(right, sizeof(right), "10m %+.0f", vd);
+            char title[32];
+            snprintf(title, sizeof(title), "VOC %.0f index", id(voc_idx).state);
+            header(accents[2], title, right);
+            it.graph(gx, gy, id(g_voc));
+            axis(0, 250, 500, "idx");
+          } else if (gv == 3) {
+            char right[32];
+            snprintf(right, sizeof(right), "H %.1f  L %.1f", id(temp_daily_max)<900?id(temp_daily_max):0, id(temp_daily_min)<900?id(temp_daily_min):0);
+            char title[32];
+            snprintf(title, sizeof(title), "Indoor %.1fC", id(temperature).state);
+            header(accents[3], title, right);
+            it.graph(gx, gy, id(g_temp));
+            axis(10, 22, 35, "C");
+          } else if (gv == 4) {
+            char right[24];
+            snprintf(right, sizeof(right), "Dew %.1fC", id(dew_point).state);
+            char title[32];
+            snprintf(title, sizeof(title), "Humidity %.0f%% RH", id(humidity).state);
+            header(accents[4], title, right);
+            it.graph(gx, gy, id(g_humidity));
+            axis(0, 50, 100, "%");
+          } else {
+            char right[24];
+            snprintf(right, sizeof(right), "%s", id(gas_status).state.c_str());
+            char title[32];
+            snprintf(title, sizeof(title), "Gas %.0f%%", id(gas_index).state);
+            header(accents[5], title, right);
+            it.graph(gx, gy, id(g_gas));
+            axis(0, 100, 200, "%");
+          }
+          it.print(gx, 190, id(f_small), DIM, "4 hours");
+          it.print(gx + gw, 190, id(f_small), DIM, TextAlign::RIGHT, "now");
+          it.line(gx, gy - 2, gx + gw, gy - 2, LINE);
+          it.line(gx, gy + gh + 2, gx + gw, gy + gh + 2, LINE);
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(38,76,112));
+          it.print(160, 225, id(f_small), W, TextAlign::CENTER, "< Back");
+
+      - id: page_system
+        lambda: |-
+          it.fill(Color(7,9,14));
+          it.filled_rectangle(0, 0, 320, 24, Color(40,44,64));
+          it.print(14, 12, id(f_body), Color(232,236,242), TextAlign::CENTER_LEFT, "System");
+          float up = id(uptime_sensor).state;
+          it.printf(10, 30, id(f_small), Color(160,200,160), "Uptime: %dh %dm", (int)(up/3600), (int)((up - (int)(up/3600)*3600)/60));
+          it.printf(10, 44, id(f_small), Color(160,180,220), "WiFi: %s  %.0f dBm", id(wifi_ssid_txt).state.c_str(), id(wifi_rssi).state);
+          it.printf(10, 58, id(f_small), Color(160,180,220), "IP: %s", id(wifi_ip).state.c_str());
+          it.printf(10, 74, id(f_small), Color(180,180,200), "ESP32 die: %.1fC  CO2 stable: %s", id(esp32_temp).state, id(co2_stable)?"yes":"no");
+          it.printf(10, 88, id(f_small), Color(180,180,200), "PM ready: %s  SPS30 idle: 5min", id(pm_warmed_up)?"yes":"no");
+          it.printf(10,104, id(f_small), Color(200,160,80), "Last alert: %s", id(last_alert_msg).c_str());
+          it.printf(10,120, id(f_small), Color(140,160,180), "Mode: %s%s%s", id(battery_save_mode)?"Eco ":"", id(away_mode)?"Dark ":"", id(deep_sleep_mode)?"Sleep":"Normal");
+          it.printf(10,136, id(f_small), Color(140,160,180), "Raw %.1fC/%.0f%%  corrected %.1fC/%.0f%%", id(temperature_raw).state, id(humidity_raw).state, id(temperature).state, id(humidity).state);
+          it.printf(10,152, id(f_small), Color(140,160,180), "Offset %.1fC  dynamic %.2fC  gain %.2f", id(temp_baseline_offset_c), id(self_heat_correction).state, id(self_heat_strength));
+          it.printf(10,168, id(f_small), Color(140,160,180), "Timeout %ds  Backlight %.0f%%  LED %.0f%%", id(screen_timeout_seconds), id(backlight_pct), id(led_pct));
+          it.print(10, 188, id(f_small), Color(100,110,125), "AirMikol v3.2 - ESPHome 2026.4+");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(40,44,64));
+          it.print(160, 225, id(f_small), Color(232,236,242), TextAlign::CENTER, "< Back");
+
+      - id: page_battery
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.filled_rectangle(0, 0, 320, 24, Color(20,80,20));
+          it.print(160, 12, id(f_body), Color(240,240,255), TextAlign::CENTER, "Battery");
+          float bp = id(battery_pct).state;
+          float bv = id(battery_v).state;
+          float pct = bp;
+          if (isnan(pct)) pct = 0.0f;
+          if (pct < 0.0f) pct = 0.0f;
+          if (pct > 100.0f) pct = 100.0f;
+          Color bc = pct<15?Color(255,40,40):pct<35?Color(255,140,0):pct<60?Color(255,220,0):Color(40,210,80);
+          int bx = 46;
+          int by = 38;
+          int bw = 220;
+          int bh = 72;
+          int capw = 10;
+          it.rectangle(bx, by, bw, bh, bc);
+          it.rectangle(bx+1, by+1, bw-2, bh-2, bc);
+          it.filled_rectangle(bx + bw, by + 22, capw, bh - 44, bc);
+          it.filled_rectangle(bx + 5, by + 5, bw - 10, bh - 10, Color(18,24,28));
+          int fill = (int)((bw - 10) * pct / 100.0f);
+          if (fill < 3 && pct > 0.0f) fill = 3;
+          it.filled_rectangle(bx + 5, by + 5, fill, bh - 10, bc);
+          it.printf(bx + bw / 2, by + 34, id(f_large), Color(255,255,255), TextAlign::CENTER, "%.0f%%", pct);
+          it.print(160, 116, id(f_small), id(is_charging) ? Color(90,230,120) : Color(160,160,180), TextAlign::CENTER, id(is_charging) ? "Charging - voltage estimate" : "Voltage estimate");
+          it.printf(160, 128, id(f_small), Color(160,160,185), TextAlign::CENTER, "%.2fV  Eco %s  runtime varies", bv, id(battery_save_mode)?"on":"off");
+          it.filled_rectangle(10, 136, 300, 8, Color(30,35,50));
+          it.filled_rectangle(10, 136, (int)(pct/100*300), 8, bc);
+          it.graph(10, 148, id(g_battery));
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(20,100,45));
+          it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
+
+      - id: page_co2_info
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.filled_rectangle(0, 0, 320, 24, Color(80,20,120));
+          it.print(160, 12, id(f_body), Color(240,240,255), TextAlign::CENTER, "CO2 Reference");
+          it.print(10, 32, id(f_small), Color(40,200,80),  "< 600 ppm    Excellent");
+          it.print(10, 46, id(f_small), Color(120,220,0),  "600-800      Good");
+          it.print(10, 60, id(f_small), Color(255,220,0),  "800-1000     Moderate");
+          it.print(10, 74, id(f_small), Color(255,120,0),  "1000-1500    Poor - open window");
+          it.print(10, 88, id(f_small), Color(255,40,40),  "1500-2000    Bad");
+          it.print(10,102, id(f_small), Color(180,0,60),   "> 2000       Dangerous");
+          it.print(10,120, id(f_small), Color(0,180,220),  "SCD41 NDIR optical sensor.");
+          it.print(10,134, id(f_small), Color(0,180,220),  "Auto-cal needs weekly fresh air.");
+          it.print(10,148, id(f_small), Color(0,180,220),  "Manual cal in Settings.");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(80,20,120));
+          it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
+
+      - id: page_pm_info
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.filled_rectangle(0, 0, 320, 24, Color(0,60,120));
+          it.print(160, 12, id(f_body), Color(240,240,255), TextAlign::CENTER, "PM Sources and Sizes");
+          it.image(20, 30, id(img_pm_sources));
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(0,60,120));
+          it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
+
+      - id: page_confirm_cal
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.filled_rectangle(0, 0, 320, 24, Color(80,20,120));
+          it.print(160, 12, id(f_body), Color(240,240,255), TextAlign::CENTER, "CO2 Calibrated");
+          it.print(160, 80, id(f_med), Color(40,220,80), TextAlign::CENTER, "Done!");
+          it.print(160, 110, id(f_small), Color(200,200,220), TextAlign::CENTER, "Calibrated to 420 ppm.");
+          it.print(160, 126, id(f_small), Color(160,160,180), TextAlign::CENTER, "Use outdoor fresh air.");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(80,20,120));
+          it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
+
+      - id: page_confirm_clean
+        lambda: |-
+          it.fill(Color(8,8,15));
+          it.filled_rectangle(0, 0, 320, 24, Color(0,60,120));
+          it.print(160, 12, id(f_body), Color(240,240,255), TextAlign::CENTER, "PM Cleaning");
+          it.print(160, 80, id(f_med), Color(40,220,80), TextAlign::CENTER, "Fan running...");
+          it.print(160, 110, id(f_small), Color(200,200,220), TextAlign::CENTER, "Auto-clean ~10 seconds.");
+          it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
+          it.rectangle(112, 214, 96, 22, Color(0,60,120));
+          it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
+
