@@ -1,6 +1,6 @@
-# AirMikol v3.2 ESPHome Air Quality Monitor
+# Portable Air Quality Monitoring Station
 
-AirMikol is a portable ESPHome indoor air quality monitor built around a FireBeetle 2 ESP32-E, a color touchscreen, and a dense set of air-quality sensors. It combines true NDIR CO2 measurement, particulate monitoring, VOC/NOx indexing, temperature and humidity correction, relative gas trend sensing, battery tracking, local alerts, and Home Assistant entities in one device.
+Portable Air Quality Monitoring Station is an ESPHome indoor air quality monitor built around a FireBeetle 2 ESP32-E, a color touchscreen, and a dense set of air-quality sensors. It combines true NDIR CO2 measurement, particulate monitoring, VOC/NOx indexing, temperature and humidity correction, relative gas trend sensing, battery tracking, local alerts, and Home Assistant entities in one device.
 
 The project is designed for a compact custom build: the components are connected through a purpose-built PCB and arranged to fit inside a 3D printed enclosure. The YAML also includes a full on-device touch UI, so the monitor remains useful even when you are not looking at Home Assistant.
 
@@ -97,7 +97,7 @@ The gas page and `Gas Index` are trend-oriented. Let the unit warm up, expose it
 
 ## Files
 
-- `airmikol.yaml` - sanitized ESPHome configuration
+- `portable-air-quality-monitoring-station.yaml` - sanitized ESPHome configuration
 - `secrets.yaml.example` - template for private credentials
 - `fonts/README.md` - font requirements
 - `AirIcons/README.md` - image/logo/icon requirements
@@ -109,7 +109,7 @@ No secrets, private Wi-Fi information, photos, or binary image assets are includ
 1. Install ESPHome `2026.4` or newer.
 2. Copy `secrets.yaml.example` to `secrets.yaml`.
 3. Fill in your own Wi-Fi SSID, Wi-Fi password, ESPHome API encryption key, OTA password, and fallback AP password.
-4. Edit the substitutions at the top of `airmikol.yaml`:
+4. Edit the substitutions at the top of `portable-air-quality-monitoring-station.yaml`:
    - `device_name`
    - `friendly_name`
    - `co2_cal_ppm`
@@ -129,7 +129,7 @@ The YAML uses local PNG images and local `.ttf` fonts. They are intentionally ig
 
 The boot splash uses:
 
-- `AirIcons/AirMikologo.png`
+- `AirIcons/logo.png`
 
 The particulate info page uses:
 
@@ -196,7 +196,7 @@ Use properly protected LiPo cells and safe charging hardware.
 From this directory:
 
 ```bash
-esphome run airmikol.yaml
+esphome run portable-air-quality-monitoring-station.yaml
 ```
 
 For a first flash over USB, connect the FireBeetle 2 ESP32-E by USB and choose the serial target when ESPHome prompts. After adoption, OTA updates can use the configured `ota_password`.

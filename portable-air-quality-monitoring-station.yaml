@@ -1,5 +1,5 @@
 ################################################################################
-#  AirMikol v3.2 | ESPHome 2026.4+ | FireBeetle 2 ESP32-E
+#  Portable Air Quality Monitoring Station v3.2 | ESPHome 2026.4+ | FireBeetle 2 ESP32-E
 #
 #  Sanitized public example:
 #  - Copy secrets.yaml.example to secrets.yaml and fill in your own values.
@@ -7,8 +7,8 @@
 #  - Update timezone and outdoor_weather_entity for your Home Assistant setup.
 ################################################################################
 substitutions:
-  device_name: airmikol
-  friendly_name: AirMikol
+  device_name: portable-air-quality-station
+  friendly_name: Portable Air Quality Monitoring Station
   co2_cal_ppm: "420"
   battery_mah: "4000"
   timezone: "Etc/UTC"
@@ -69,7 +69,7 @@ wifi:
   fast_connect: true
   reboot_timeout: 0s
   ap:
-    ssid: "AirMikol Setup"
+    ssid: "Portable AQ Setup"
     password: !secret ap_password
     ap_timeout: 2min
 captive_portal:
@@ -306,7 +306,7 @@ color:
 
 # IMAGE ASSETS - Not included in this repo. See AirIcons/README.md.
 image:
-  - file: "AirIcons/AirMikologo.png"
+  - file: "AirIcons/logo.png"
     id: img_logo
     type: RGB565
   - file: "AirIcons/CO2icon.png"
@@ -388,7 +388,7 @@ output:
 light:
   - platform: monochromatic
     output: backlight_pwm
-    name: "AirMikol Backlight"
+    name: "Portable AQ Backlight"
     id: backlight
     restore_mode: ALWAYS_ON
     default_transition_length: 300ms
@@ -398,7 +398,7 @@ light:
     variant: WS2812
     pin: GPIO5
     num_leds: 1
-    name: "AirMikol Status LED"
+    name: "Portable AQ Status LED"
     restore_mode: ALWAYS_ON
     default_transition_length: 500ms
     effects:
@@ -2582,7 +2582,7 @@ display:
           it.printf(10,136, id(f_small), Color(140,160,180), "Raw %.1fC/%.0f%%  corrected %.1fC/%.0f%%", id(temperature_raw).state, id(humidity_raw).state, id(temperature).state, id(humidity).state);
           it.printf(10,152, id(f_small), Color(140,160,180), "Offset %.1fC  dynamic %.2fC  gain %.2f", id(temp_baseline_offset_c), id(self_heat_correction).state, id(self_heat_strength));
           it.printf(10,168, id(f_small), Color(140,160,180), "Timeout %ds  Backlight %.0f%%  LED %.0f%%", id(screen_timeout_seconds), id(backlight_pct), id(led_pct));
-          it.print(10, 188, id(f_small), Color(100,110,125), "AirMikol v3.2 - ESPHome 2026.4+");
+          it.print(10, 188, id(f_small), Color(100,110,125), "Portable AQ Station v3.2 - ESPHome 2026.4+");
           it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
           it.rectangle(112, 214, 96, 22, Color(40,44,64));
           it.print(160, 225, id(f_small), Color(232,236,242), TextAlign::CENTER, "< Back");
@@ -2671,4 +2671,3 @@ display:
           it.filled_rectangle(112, 214, 96, 22, Color(18,22,32));
           it.rectangle(112, 214, 96, 22, Color(0,60,120));
           it.print(160, 225, id(f_small), Color(240,240,255), TextAlign::CENTER, "< Back");
-

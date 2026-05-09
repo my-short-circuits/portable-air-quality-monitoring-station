@@ -4,7 +4,7 @@ The ESPHome YAML references local PNG assets for the boot logo, sensor icons, se
 
 Expected files:
 
-- `AirMikologo.png` - boot splash/logo
+- `logo.png` - boot splash/logo
 - `CO2icon.png`
 - `COicon.png`
 - `NH3icon.png`
@@ -26,7 +26,6 @@ Expected files:
 - `TIMEOUTicon.png`
 - `PLUGicon.png`
 
-These images are intentionally not included. Add your own PNGs with these names, or remove/comment the matching `image:` entries and display calls in `airmikol.yaml`.
+These images are intentionally not included. Add your own PNGs with these names, or remove/comment the matching `image:` entries and display calls in `portable-air-quality-monitoring-station.yaml`.
 
-The splash screen uses `AirMikologo.png`; replace it with your own logo or remove the `it.image(...)` line on the boot page.
-
+The splash screen uses `logo.png`; replace it with your own logo or remove the `it.image(...)` line on the boot page.
